@@ -53,7 +53,16 @@ namespace db {
         // 根据给定key在bptree上查找，返回（是否成功，对应value）
         std::pair<bool, struct iovec> search(struct iovec key);
 
+        inline void reset_track(){
+            while(!track.empty())
+                track.pop();
+        }
+
         unsigned int find_leaf(struct iovec key);
+
+        unsigned int node_create(Node *node);
+
+        void insert_to_index(struct iovec key, unsigned int new_node_id);
 
         // 根据给定key-value对在bptree上插入，返回是否成功
         bool insert(struct iovec key, struct iovec value);

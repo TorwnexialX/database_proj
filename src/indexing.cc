@@ -61,6 +61,16 @@ unsigned int Bptree::find_leaf(struct iovec key){
     return child;
 }
 
+unsigned int Bptree::node_create(Node *node){
+    Node new_node;
+    unsigned int new_id = table_.allocate(1);
+    attach_node(new_node, new_id);
+    new_node.setNext(node->getNext());
+    node->setNext(new_node.getSelf());
+    new_node.detach();
+    return new_id;
+}
+
 bool Node::same_key(struct iovec key, unsigned int index){
     Record record;
     if (index >= getSlots()) return false;
@@ -72,6 +82,77 @@ bool Node::same_key(struct iovec key, unsigned int index){
 
     if (memcmp(pkey, key.iov_base, len) == 0) return true;
     else return false;
+}
+
+void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
+    // 获取超级块
+    SuperBlock super;
+    BufDesp *desp2 = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(desp2->buffer);
+    desp2->relref();
+
+    // 向上传递的键和值
+    void *upper_key = new char[key.iov_len];
+    memcpy(upper_key, key.iov_base, key.iov_len);
+    unsigned int upper_value = new_node_id;
+    unsigned int value_len = 4;
+
+    // 如果栈不为空
+    while(!track.empty()){
+        // 获取栈顶元素
+        unsigned int node_parent = track.top();
+        track.pop();
+        Node now_node;
+        attach_node(now_node, node_parent);
+        // 包装成iov
+        std::vector<struct iovec> iov(2);
+        iov[0].iov_base = upper_key;
+        iov[0].iov_len = key.iov_len;
+        iov[1].iov_base = &upper_value;
+        iov[1].iov_len = value_len;
+        value_type->betoh(&upper_value);
+        // 插入
+        std::pair<bool, unsigned int> ret = now_node.insertRecord(iov);
+        // 如果插入的地方为最后一个槽位，则需要调整各record指向信息
+        if(ret.second == now_node.getSlots() - 1){
+            now_node.deallocate(ret.second);
+            unsigned int next_node = now_node.getNext();
+            value_type->htobe(&next_node);
+            iov[0].iov_base = upper_key;
+            iov[0].iov_len = key.iov_len;
+            iov[1].iov_base = &tmpvalue;
+            iov[1].iov_len = value_len;
+            now_node.setNext(upper_value);
+            now_node.insertRecord(iov);
+        }
+        // 插入的地方不是最后一个槽位，则为一般情况
+        else{
+            Record next_record;
+            now_node.refslots(ret.second + 1, next_record);
+            void *next_key = new char [key.iov_len];
+            unsigned int next_value;
+            next_record.getByIndex((char *) next_key, (unsigned int *) &key.iov_len, 0);
+            next_record.getByRecord((char *) &next_value, (unsigned int *) &value_len, 1);
+
+            // 将相邻的两块位置都清出来
+            now_node.deallocate(ret.second);
+            now_node.deallocate(ret.second);
+            
+            value_type->htobe(&upper_value);
+            std::vector<struct iovec> pre_iov(2);
+            pre_iov[0].iov_base = upper_key;
+            pre_iov[0].iov_len = key.iov_len;
+            pre_iov[1].iov_base = &next_value;
+            pre_iov[1].iov_len = value_len;
+            std::vector<struct iovec> next_iov(2);
+            next_iov[0].iov_base = next_key;
+            next_iov[0].iov_len = key.iov_len;
+            next_iov[1].iov_base = &upper_value;
+            next_iov[1].iov_len = value_len;
+            now_node.insertRecord(pre_iov);
+            now_node.insertRecord(next_iov);
+        }
+    }
 }
 
 bool Bptree::insert(struct iovec key, struct iovec value){
@@ -106,8 +187,64 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     }
 
     // B+树非空
-    // 栈，是否需要？？？？？？？？？？
+    // 需要栈，插入数据需要不断回溯查看是否存在需要分块的情况
+    Node leaf_node;
+    reset_track();
+    unsigned int leaf_loc = find_leaf(key);
+    attach_node(leaf_node, leaf_loc);
 
+    // 如果要插入的记录项已存在
+    if same_key(key, leaf_loc) {return 1;}
+
+    // 如果要插入的记录项不存在
+    if (leaf_node.getSlots() == superblock.getOrder() - 1){
+        // 该leaf_node已经满了，需要分裂
+        // 1. 创建新Node
+        Node new_node;
+        unsigned int new_id = node_create(&leaf_node);
+        attach_node(new_node, new_id);
+        new_node.set_leaf(true);
+
+        // 2. 原node数据分开，一部分放入new_node
+        unsigned short mid_record = (leaf_node.getSlots + 1) / 2;
+
+        // 将mid_record节点放入new_node节点中，插入的new_record放入leaf_node中
+        if (leaf_loc <= mid_record - 1){
+            while(leaf_node.getSlots() >= mid_record){
+                Record record;
+                leaf_node.refslots(mid_record - 1, record);
+                new_node.copyrecord(key.iov_len, record);
+                leaf_node.deallocate(mid_record - 1);
+            }
+            leaf_node.insertRecord(iov);
+        }
+        else{ // mid_record节点放入leaf_node中，插入的new_record放入new_node中
+            while(leaf_node.getSlots() > mid_record){
+                Record record;
+                leaf_node.refslots(mid_record, record);
+                new_node.copyrecord(key.iov_len, record);
+                leaf_node.deallocate(mid_record);
+            }
+            leaf_node.insertRecord(iov);
+        }
+        // 3. 将中间的节点加入父节点中
+        // 如果bptree只有一个节点（即根节点就是叶子结点）
+        if (leaf_node.getSelf() == superblock.getIndexroot()){
+            Node new_root;
+            unsigned int new_root_id = node_create(&new_root);
+            superblock.setIndexroot(new_root_id);
+            track.push(new_root_id);
+            superblock.setHeight(superblock.getHeight() + 1);
+        }
+        Record record;
+        new_node.refSlots(0, record);
+        void *point_key = new char [key.iov_len];
+        record.getByIndex((char *) point_key, (unsigned int *) &key.iov_len, 0);
+
+        insert_to_index(point_key, key.iov_len, new_node.getSelf());
+    } else leaf_node.insertRecord(iov); // 直接插入
+
+    return 0;
 }
 
 std::pair<bool, unsigned int> Bptree::get_root(){
