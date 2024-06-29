@@ -43,11 +43,7 @@ namespace db {
         std::stack<unsigned int> track;
         DataType *key_type;
         DataType *value_type;
-        Bptree() {
-            table_ = nullptr;
-            key_type = findDataType("INT");
-            value_type = findDataType("INT");
-        }
+        Bptree() { table_ = nullptr; }
 
         /* key, value 各对应一个 struct iovec */
         // 根据给定key在bptree上查找，返回（是否成功，对应value）
@@ -60,7 +56,9 @@ namespace db {
 
         unsigned int find_leaf(struct iovec key);
 
-        unsigned int node_create(Node *node);
+        // 在给定节点后连接一个新节点，并返回该新节点
+        // ATTENTION: 直接返回节点不确定是否会出现bug
+        Node node_append(Node *node);
 
         void insert_to_index(struct iovec key, unsigned int new_node_id);
 
@@ -76,6 +74,10 @@ namespace db {
         // 将给定node绑定到B+树所在table的第node_id个node
         void attach_node(Node &node, unsigned int node_id);
 
-        inline void set_table(Table *table_){this->table_ = table_};
+        inline void set_table(Table *table_, unsigned int pkey, unsigned int pvalue) {
+            this->table_ = table_;
+            this->key_type = table_->info_->fields[pkey].type;
+            this->value_type = table_->info_->fields[pvalue].type;
+        }
     }
 }
