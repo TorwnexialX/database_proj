@@ -365,15 +365,15 @@ unsigned short DataBlock::requireLength(std::vector<struct iovec> &iov)
 std::pair<bool, unsigned short>
 DataBlock::insertRecord(std::vector<struct iovec> &iov)
 {
-    RelationInfo *info = table_->info_;
-    unsigned int key = info->key;
-    DataType *type = info->fields[key].type;
+    RelationInfo *info = table_->info_; // 表的元数据
+    unsigned int key = info->key; // 表的key
+    DataType *type = info->fields[key].type; // key的数据类型
 
-    // 先确定插入位置
+    // 先确定插入位置（二分法）
     unsigned short index =
         type->search(buffer_, key, iov[key].iov_base, iov[key].iov_len);
 
-    // 比较key
+    // 比较key 小于slots之后不会让后面的slots都后移吗
     Record record;
     if (index < getSlots()) {
         Slot *slots = getSlotsPointer();
@@ -382,7 +382,8 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
             be16toh(slots[index].length));
         unsigned char *pkey;
         unsigned int len;
-        record.refByIndex(&pkey, &len, key);
+        record.refByIndex(&pkey, &len, key); // 获取index处的key
+        // 其值可能大于或等于要插入的key，所以要验证
         if (memcmp(pkey, iov[key].iov_base, len) == 0) // key相等不能插入
             return std::pair<bool, unsigned short>(false, -1);
     }
@@ -407,6 +408,60 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
     if (alloc_ret.second) reorder(type, key);
 
     return std::pair<bool, unsigned short>(true, index);
+}
+
+std::pair<bool, unsigned short>
+DataBlock::removeRecord(std::vector<struct iovec> &iov)
+{
+    RelationInfo *info = table_->info_;
+    unsigned int key = info->key;
+    DataType *type = info->fields[key].type;
+
+    unsigned short search_result;
+    search_result = searchRecord(iov[key].iov_base, iov[key].iov_len);
+
+    //判断lowbound的key和搜索的key是否一致。
+    bool find_flag = false; // 指示找到的key与提供的key是否一致
+    Record record;
+    if (search_result >= getSlots())
+        return std::pair<bool, unsigned short>(false, (unsigned short)-1);
+        // -1是unsigned short的非法值
+        // `(unsigned short)`化了之后为65535，真实删去的record的索引也很难达到这个值
+
+    // 把slots中第search_result个slot的记录加载到record中
+    refslots(search_result, record); 
+    unsigned char *pkey;
+    unsigned int plen;
+    record.refByIndex(&pkey, &plen, key); // 将索引为key的字段base与长度分别存在pkey和plen中
+    // 查看index处的key是否等于要删除的key，是则说明找到了要删除的记录
+    if (memcmp(pkey, iov[key].iov_base, iov[key].iov_len) == 0) find_flag = true;
+    else find_flag = false;
+
+    // 被删除记录不存在
+    if (find_flag == false) return std::pair<bool, unsigned short>(false, -1);
+    // 被删除记录存在，删除对应记录
+    else{
+        deallocate(search_result);
+        // 更新块内空闲空间大小
+        unsigned int iov_size = requireLength(iov);
+
+        return std::pair<bool, unsigned short>(true, search_result); // 返回删除位置
+    }
+}
+
+
+std::pair<bool, unsigned short>
+DataBlock::updateRecord(std::vector<struct iovec> &iov)
+{
+    // 先执行删除操作
+    std::pair<bool, unsigned short> remove_result = removeRecord(iov);
+    // 被更新记录不存在
+    if (remove_result.first == false) return remove_result;
+    // 被更新记录存在，删除对应记录，插入新的record 
+    else{
+        std::pair<bool, unsigned short> update_result = insertRecord(iov);
+        return update_result; // 返回插入结果
+    }
 }
 
 bool DataBlock::copyRecord(Record &record)

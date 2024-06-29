@@ -220,6 +220,7 @@ struct CharCompare2
     size_t size;           // val长度
     unsigned int key;      // 键的位置
 
+    // Slot sx 在key处的值是否小于val
     bool operator()(const Slot &sx, const Slot &sy)
     {
         // 先转化为主机字节序
@@ -469,7 +470,7 @@ static unsigned short
 CharSearch(unsigned char *block, unsigned int key, void *val, size_t len)
 {
     DataHeader *header = reinterpret_cast<DataHeader *>(block);
-    unsigned count = be16toh(header->slots);
+    unsigned count = be16toh(header->slots); // slots 数量
     Slot *slots = reinterpret_cast<Slot *>(
         block + BLOCK_SIZE - sizeof(int) - count * sizeof(Slot));
 

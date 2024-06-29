@@ -2,6 +2,7 @@ build/*
 include/db/config.h
 .vs/*
 CMakeSettings.json
+*.md
 *.log
 *.fls
 *.blg

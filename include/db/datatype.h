@@ -27,6 +27,7 @@ struct DataType
     // val - 指向键的指针
     // len - 键val的长度
     // 返回值：返回lowerbound的位置
+    // 在给定block中于该key下找到>=val的位置(lowerbound)，并返回Slot的索引
     using Search = unsigned short (
             *)(unsigned char *block, unsigned int key, void *val, size_t len);
     // 比较键

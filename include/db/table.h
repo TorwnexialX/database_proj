@@ -64,13 +64,14 @@ class Table
     // 打开一张表
     int open(const char *name);
 
-    // 定位一个block后，插入一条记录
-    int insert(unsigned int blkid, std::vector<struct iovec> &iov);
-    int update();
-    int remove();
-
     // 采用枚举的方式定位一个key在哪个block
     unsigned int locate(void *keybuf, unsigned int len);
+    // 定位一个block后，插入一条记录
+    int insert(unsigned int blkid, std::vector<struct iovec> &iov);
+    int remove(unsigned int blkid, void *keybuf, unsigned int len);
+    int update(unsigned int blkid, std::vector<struct iovec> &iov);
+    // btree搜索
+    unsigned int search(void *keybuf, unsigned int len);
 
     // 返回表上总的记录数目
     size_t recordCount();

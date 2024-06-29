@@ -1,0 +1,72 @@
+// 由DataBlock继承出node，新增is_leaf和left_node变量
+// 非叶子节点next无效，用left_node代替
+// 叶子节点next有效，left_node无效
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <queue>
+#include <stack>
+#include "./block.h"
+#include "./table.h"
+#include "./buffer.h"
+
+#define KEY_INDEX 0
+#define VALUE_INDEX 1
+
+namespace db {
+    class Node : public DataBlock {
+        private:
+        bool leaf; // 该node是否是叶子节点
+        unsigned int left_node; // 该node最左边指向的孩子节点的id
+
+        public:
+        Node(bool leaf, unsigned int left_node) {
+            this->leaf = leaf;
+            this->left_node = left_node;
+        }
+
+        bool is_leaf() {return leaf;}
+
+        void set_leaf(bool leaf) {this->leaf = leaf;}
+
+        unsigned int get_left() {return left_node;}
+
+        void set_left(unsigned int left_node) {this->left_node = left_node;}
+
+        bool same_key(struct iovec key, unsigned int record_index);
+    }
+
+    class Bptree {
+        public:
+        Table *table_;
+        std::stack<unsigned int> track;
+        DataType *key_type;
+        DataType *value_type;
+        Bptree() {
+            table_ = nullptr;
+            key_type = findDataType("INT");
+            value_type = findDataType("INT");
+        }
+
+        /* key, value 各对应一个 struct iovec */
+        // 根据给定key在bptree上查找，返回（是否成功，对应value）
+        std::pair<bool, struct iovec> search(struct iovec key);
+
+        unsigned int find_leaf(struct iovec key);
+
+        // 根据给定key-value对在bptree上插入，返回是否成功
+        bool insert(struct iovec key, struct iovec value);
+
+        // 根据给定key在bptree上删除，返回是否成功
+        bool remove(struct iovec key);
+
+        // 获取根节点id
+        std::pair<bool, unsigned int> get_root();
+
+        // 将给定node绑定到B+树所在table的第node_id个node
+        void attach_node(Node &node, unsigned int node_id);
+
+        inline void set_table(Table *table_){this->table_ = table_};
+    }
+}

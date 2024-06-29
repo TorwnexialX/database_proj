@@ -7,6 +7,7 @@
 //
 #include "../catch.hpp"
 #include <db/block.h>
+#include <db/endian.h>
 #include <db/record.h>
 #include <db/buffer.h>
 #include <db/file.h>
@@ -477,7 +478,7 @@ TEST_CASE("db/block.h")
         id = htobe64(3);
         unsigned short ret = type->search(buffer, 0, &id, sizeof(id));
         REQUIRE(ret == 0);
-        id = htobe64(12);
+        id = htobe64(12);++
         ret = type->search(buffer, 0, &id, sizeof(id));
         REQUIRE(ret == 1);
         id = htobe64(2);
@@ -523,8 +524,12 @@ TEST_CASE("db/block.h")
         std::vector<struct iovec> iov(3);
         long long nid;
         char phone[20];
+        phone[1] = '1';
         char addr[128];
 
+        // Section之间是否独立（数据之间互相用，重定义）
+        // 4个slots,每个slots有3个record?
+        // slots扮演的角色？
         // 第1条记录
         nid = 7;
         type->htobe(&nid);
@@ -669,6 +674,171 @@ TEST_CASE("db/block.h")
         // 写入，释放
         kBuffer.writeBuf(bd);
         kBuffer.releaseBuf(bd);
+    }
+
+    SECTION("remove"){
+        // 验证了删去已有record和不存在record两种情况
+        // 通过slots数减少验证record数减少
+        // 验证freesize, freespacesize, freespace前后变化
+        // 验证tombstone置位
+        Table table;
+        table.open("table");
+        //加载超级块
+        BufDesp *bd = kBuffer.borrow("table", 0);
+        SuperBlock super;
+        super.attach(bd->buffer);
+        int id = super.getFirst();
+        // 加载第一个DataBlock
+        DataBlock data;
+        data.setTable(&table);
+        BufDesp *bd2 = kBuffer.borrow("table", id);
+        data.attach(bd2->buffer);
+        bd2->relref();
+
+        /* 删除一个存在的记录 */
+        // 删除nid=7的记录，因而先构造该记录
+        DataType *type = findDataType("BIGINT");
+        std::vector<struct iovec> iov(3);
+        long long nid;
+        char phone[20];
+        phone[1] = '1';
+        char addr[128];
+
+        nid = 7;
+        type->htobe(&nid);
+        iov[0].iov_base = &nid;
+        iov[0].iov_len = 8;
+        iov[1].iov_base = phone;
+        iov[1].iov_len = 20;
+        iov[2].iov_base = (void *) addr;
+        iov[2].iov_len = 128;
+
+        // 删除前对record引用，nid=7的记录索引为2（因为已经存储的nid是:3 5 7 11）
+        Record record;
+        unsigned char *buffer = data.buffer_;
+        Slot *slots = data.getSlotsPointer();
+        record.attach(
+            data.buffer_ + be16toh(slots[2].offset),
+            be16toh(slots[2].length)); // nid=7，排序完后索引为2
+
+        // 删除前保存内存情况(freesize, freespacesize, freespace)
+        unsigned short before_freespacesize = data.getFreespaceSize(); // Block的FreeSpaceSize
+        unsigned short before_freesize = data.getFreeSize(); // Block的FreeSize
+        unsigned short before_freespace = data.getFreeSpace();
+
+        std::pair<bool, unsigned short> remove_result = data.removeRecord(iov);
+
+        // 删除后的内存情况(freesize, freespacesize, freespace)
+        unsigned short after_freesize = data.getFreeSize(); // 176改变来源于 `deallocate()`
+        unsigned short after_freespacesize = data.getFreespaceSize();
+        unsigned short after_freespace = data.getFreeSpace();
+
+        REQUIRE(remove_result.first);
+        REQUIRE(remove_result.second == 2);
+        REQUIRE(data.getSlots() == 3); // metahead中record数量 只找到了slots
+        REQUIRE(after_freespacesize - before_freespacesize == 8); // slots由4->3，trailer空间4*4+4->4*3+4，这样不用多对齐一次，所以少8
+        REQUIRE(after_freesize - before_freesize == 168+8); // 168+8 record所需大小+为了对齐向上取的8
+        REQUIRE(*record.buffer_ == RECORD_MASK_TOMBSTONE); // tombstone置位
+        REQUIRE(before_freespace == after_freespace); // freespace不变
+
+        // 把原来记录加上
+        data.insertRecord(iov);
+
+        /* 删除不存在的记录 */
+        nid = 10;
+        remove_result = data.removeRecord(iov);
+        REQUIRE(remove_result.first == false);
+        REQUIRE(remove_result.second == (unsigned short)-1);
+              
+    }
+
+    SECTION("update"){
+        // 更新record为同长record
+        // 更新record为过长record
+        // 更新不存在record
+        Table table;
+        table.open("table");
+        //加载超级块
+        BufDesp *bd = kBuffer.borrow("table", 0);
+        SuperBlock super;
+        super.attach(bd->buffer);
+        int id = super.getFirst();
+        // 加载第一个DataBlock
+        DataBlock data;
+        data.setTable(&table);
+        BufDesp *bd2 = kBuffer.borrow("table", id);
+        data.attach(bd2->buffer);
+        bd2->relref();
+
+        /* 更新nid=7的record为同长record */
+        Record record;
+        data.refslots(2, record); // nid=7的record索引为2
+        unsigned char *pkey;
+        unsigned int plen;
+        record.refByIndex(&pkey, &plen, 1); // `phone[1]=='1'`出现在iov(1)中
+        REQUIRE(pkey[1] == '1');
+
+        // 设置更新内容情况（只改了phone[1]，不改nid是因为nid为主键）
+        DataType *type = findDataType("BIGINT");
+        std::vector<struct iovec> iov(3);
+        long long nid;
+        char phone[20];
+        phone[1] = '2';
+        char addr[128];
+        nid = 7;
+        type->htobe(&nid);
+        iov[0].iov_base = &nid;
+        iov[0].iov_len = 8;
+        iov[1].iov_base = phone;
+        iov[1].iov_len = 20;
+        iov[2].iov_base = (void *) addr;
+        iov[2].iov_len = 128;
+
+        // 更新前内存情况
+        unsigned short before_freespacesize = data.getFreespaceSize(); // Block的FreeSpaceSize
+        unsigned short before_freesize = data.getFreeSize(); // Block的FreeSize
+        unsigned short before_freespace = data.getFreeSpace();
+        unsigned short record_size = data.requireLength(iov);
+        REQUIRE(record_size == 168);
+
+        std::pair<bool, unsigned short> update_result = data.updateRecord(iov);
+
+        // 更新后内存情况
+        unsigned short after_freesize = data.getFreeSize();
+        unsigned short after_freespacesize = data.getFreespaceSize();
+        unsigned short after_freespace = data.getFreeSpace();
+
+        REQUIRE(update_result.first);
+        REQUIRE(update_result.second == 2);
+        REQUIRE(data.getSlots() == 4);
+        REQUIRE(before_freespacesize - after_freespacesize == record_size); 
+        REQUIRE(before_freesize == after_freesize); 
+        REQUIRE(after_freespace == before_freespace + record_size); 
+
+        // 检查内容更新情况
+        data.refslots(2, record);
+        record.refByIndex(&pkey, &plen, 1);
+        REQUIRE(pkey[1] != '1');
+        REQUIRE(pkey[1] == '2');
+
+        /* 更新record为过长record */
+        iov[2].iov_len = (size_t) BLOCK_SIZE; // 更新过长（超过block大小）
+        update_result = data.updateRecord(iov);
+        REQUIRE(!update_result.first);
+        //此时Record被标记为Tomestone，但是没有插入，需要分裂blk
+        if (!update_result.first) {
+            iov[2].iov_base = (void *) addr;
+            iov[2].iov_len = 128;
+            data.insertRecord(iov);
+        }
+
+        /* 更新不存在的record */
+        nid = 10;
+        update_result = data.updateRecord(iov);
+        unsigned short nslots = data.getSlots();
+        REQUIRE(update_result.first == false);
+        REQUIRE(update_result.second == (unsigned short) -1);
+        nid = 7; // 还原nid
     }
 
     SECTION("iterator")

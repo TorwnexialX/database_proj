@@ -15,9 +15,10 @@
 //   |   |
 //   |   +-- 最小记录
 //   +-- tombstone
+// tombstone表示记录是否被删除，如果为1则表示被删除
+//
 //
 // 记录的分配按照4B对齐，同时要求block头部至少按照4B对齐
-//
 // @author niexw
 // @email niexiaowen@uestc.edu.cn
 //
@@ -84,7 +85,7 @@ class Record
     bool get(std::vector<struct iovec> &iov, unsigned char *header);
     // 从buffer拷贝某个字段
     bool getByIndex(char *buffer, unsigned int *len, unsigned int index);
-    // 从buffer引用各字段
+    // 从buffer引用各字段（获取各字段的offset存到iov中，并将record头部存到header里）
     bool ref(std::vector<struct iovec> &iov, unsigned char *header);
     // 从buffer引用某个字段
     bool

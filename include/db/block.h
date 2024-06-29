@@ -64,7 +64,7 @@ struct CommonHeader
     unsigned short freespace; // 空闲记录链表(2B)
 };
 
-// slots结构
+// slots结构 4B
 struct Slot
 {
     unsigned short offset; // 记录偏移量
@@ -90,6 +90,11 @@ struct SuperHeader : CommonHeader
     unsigned int maxid;      // 最大的blockid(4B)
     unsigned int pad;        // 填充位(4B)
     long long records;       // 记录数目(8B)
+    // 聚集索引相关
+    unsigned int order;      // B+树阶数
+    unsigned int root;       // B+树根节点
+    unsigned int nodecounts; // B+树节点个数
+    // hight
 };
 
 // 空闲块头部
@@ -323,6 +328,59 @@ class SuperBlock : public Block
         SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
         return be64toh(header->records);
     }
+
+    // 获得阶数
+    inline unsigned int getOrder()
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        return be32toh(header->order);
+    }
+    // 设定阶数
+    inline void setOrder(unsigned int order)
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        header->order = htobe32(order);
+    }
+
+    // 获得根节点
+    inline unsigned int getRoot()
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        return be32toh(header->root);
+    }
+    // 设定根节点
+    inline void setRoot(unsigned int root)
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        header->root = htobe32(root);
+    }
+
+    // 获得节点数
+    inline unsigned int getNodecounts()
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        return be32toh(header->nodecounts);
+    }
+    // 设定节点数
+    inline void setNodecounts(unsigned int num_nodes)
+    {
+        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+        header->nodecounts = htobe32(num_nodes);
+    }
+    // 自增节点数
+    inline void addNodecounts()
+    {
+        unsigned int num_nodes = getNodecounts();
+        num_nodes++;
+        setNodecounts(num_nodes);
+    }
+    // 自减节点数
+    inline void relNodecounts()
+    {
+        unsigned int num_nodes = getNodecounts();
+        num_nodes--;
+        setNodecounts(num_nodes);
+    }
 };
 
 ////
@@ -471,7 +529,7 @@ class MetaBlock : public Block
         type->sort(buffer_, key);
     }
 
-    // 引用slots[]
+    // 引用slots[] 通过索引根据slots找到record
     bool refslots(unsigned short index, Record &record)
     {
         if (buffer_ == nullptr || index >= getSlots()) return false;
@@ -551,7 +609,13 @@ class DataBlock : public MetaBlock
     // 修改记录
     // 修改一条存在的记录
     // 先标定原记录为tomestone，然后插入新记录
-    bool updateRecord(std::vector<struct iovec> &iov);
+    std::pair<bool, unsigned short>
+    updateRecord(std::vector<struct iovec> &iov);
+    // 删除记录
+    // 查找记录是否存在
+    // 有则标定原记录为tomestone，然后改变freespace_size
+    std::pair<bool, unsigned short>
+    removeRecord(std::vector<struct iovec> &iov);
     // 分裂块位置
     // 给定新增的记录大小和位置，计算从何处开始分裂该block
     // 1. 先按照键排序
