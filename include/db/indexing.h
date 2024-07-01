@@ -16,21 +16,26 @@
 
 namespace db {
     class Node : public DataBlock {
-        private:
-        unsigned int left_node; // 该node最左边指向的孩子节点的id
-
         public:
-        Node() {
-            left_node = this->getNext();
+        bool is_leaf() {
+            DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
+            return header->leaf;
         }
 
-        bool is_leaf() {return leaf;}
+        void set_leaf(bool leaf) {
+            DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
+            header->leaf = leaf;
+        }
 
-        void set_leaf(bool leaf) {this->leaf = leaf;}
+        unsigned int get_left() {
+            MetaHeader *header = reinterpret_cast<MetaHeader *>(buffer_);
+            return be32toh(header->next);
+        }
 
-        unsigned int get_left() {return left_node;}
-
-        void set_left(unsigned int left_node) {this->left_node = left_node;}
+        void set_left(unsigned int left_node) {
+            MetaHeader *header = reinterpret_cast<MetaHeader *>(buffer_);
+            header->next = htobe32(left_node);
+        }
 
         bool same_key(struct iovec key, unsigned int record_index);
     }
@@ -46,7 +51,7 @@ namespace db {
         /* key, value 各对应一个 struct iovec */
         // 根据给定key在bptree上查找，返回（是否成功，对应value）
         std::pair<bool, struct iovec> search(struct iovec key);
-
+ 
         inline void reset_track(){
             while(!track.empty())
                 track.pop();
