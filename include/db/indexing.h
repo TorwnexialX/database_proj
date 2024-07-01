@@ -17,13 +17,11 @@
 namespace db {
     class Node : public DataBlock {
         private:
-        bool leaf; // 该node是否是叶子节点
         unsigned int left_node; // 该node最左边指向的孩子节点的id
 
         public:
-        Node(bool leaf, unsigned int left_node) {
-            this->leaf = leaf;
-            this->left_node = left_node;
+        Node() {
+            left_node = this->getNext();
         }
 
         bool is_leaf() {return leaf;}
