@@ -83,6 +83,8 @@ bool Node::same_key(struct iovec key, unsigned int index){
     else return false;
 }
 
+// 输入参数确定
+// 调顺序
 void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
     // 获取超级块
     SuperBlock super;
@@ -93,7 +95,7 @@ void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
     // 如果栈不为空
     while(!track.empty()){
         // 获取栈顶元素
-        unsigned int node_parent = track.top();
+        unsigned int parent_id = track.top();
         track.pop();
 
         // 包装成iov
@@ -110,18 +112,83 @@ void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
 
         // 将给定键值对插入cur_record
         Node cur_node;
-        attach_node(cur_node, node_parent);
+        attach_node(cur_node, parent_id);
         std::pair<bool, unsigned int> insert_result = cur_node.insertRecord(iov);
 
         // 非根节点分裂
+        if((super.getRoot() != parent_id) && (cur_node.getSlots() == super.getOrder() - 1)){
+
+        }
 
         // 根节点分裂：特殊，设置最左侧子节点域
-    }
+        if((super.getRoot() == parent_id) && (cur_node.getSlots() == super.getOrder() - 1)){
+            Node latter_node;
+            
+            // 挪record
 
-    // 分裂情况
+            unsigned int& cur_node_id = parent_id;
+            unsigned int latter_node_id = table_->allocate(1); // bpt不是不用table吗
+        }
+    }
 
 
 }
+
+// 首先，此处用函数不严谨，应是insert中进入while前的一段
+// 函数中的key, value始终是大端，检查有无保持，或者此设置会不会出错
+void Bptree::insert_to_index(struct iovec key, struct iovec value, unsigned int node_id){
+    // 获取超级块
+    SuperBlock super;
+    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(desp->buffer);
+    desp->relref();
+
+    // 插入k-v对
+    Node cur_node;
+    attach_node(cur_node, node_id);
+    std::vector<struct iovec> iov(2);
+    iov[0] = key;
+    iov[1] = value;
+    cur_node.insertRecord(iov);
+
+    // 判断是否分裂
+    if (cur_node.getSlots() < super.getOrder() - 1) return;
+
+    // 执行分裂操作
+    // 1. 创建新node
+    Node next_node = node_append(&cur_node);
+    // 如果当前节点为叶子结点，则next_node需要设置为叶子结点
+    if (cur_node.get_leaf() == true) next_node.set_leaf(true);
+    // 2. 将cur_node数据分开，一部分放入next_node
+    // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
+    unsigned short mid_record = cur_node.getSlots() / 2;
+    while(cur_node.getSlots() > (n - 1) / 2){
+        Record record;
+        cur_node.refslots(mid_record, record);
+        next_node.copyRecord(record);
+        cur_node.deallocate(mid_record);
+    }
+    
+    // 获取next_node的首record的key-value
+    Record head_record;
+    next_node.refslots(0, head_record); // 不确定ref还是copy
+    unsigned int head_key, key_len;
+    head_record.getByIndex((char *)&head_key, &key_len, 0);
+
+    // 更新key
+    key.iov_base = &head_key;
+    key.iov_len = sizeof(head_key);
+
+    // 更新value
+    value.iov_base = &node_id;
+    value.iov_len = sizeof(node_id);
+
+    // 更新 node_id
+    node_id = track.top();
+    track.pop();
+    
+}
+
 
 bool Bptree::insert(struct iovec key, struct iovec value){
     // 读取超级块
