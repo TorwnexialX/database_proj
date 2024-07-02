@@ -86,56 +86,116 @@ bool Node::same_key(struct iovec key, unsigned int index){
 void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
     // 获取超级块
     SuperBlock super;
-    BufDesp *desp2 = kBuffer.borrow(table_->name_.c_str(), 0);
-    super.attach(desp2->buffer);
-    desp2->relref();
-
-    // 向上传递的键和值
-    void *upper_key = new char[key.iov_len];
-    memcpy(upper_key, key.iov_base, key.iov_len);
-    unsigned int upper_value = new_node_id;
-    unsigned int value_len = 4;
+    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+    super.attach(desp->buffer);
+    desp->relref();
 
     // 如果栈不为空
     while(!track.empty()){
         // 获取栈顶元素
         unsigned int node_parent = track.top();
         track.pop();
-        Node now_node;
-        attach_node(now_node, node_parent);
+        Node cur_node;
+        attach_node(cur_node, node_parent);
         // 包装成iov
+        new_node_id = htobe32(new_node_id);
         std::vector<struct iovec> iov(2);
-        iov[0].iov_base = upper_key;
+        iov[0].iov_base = key.iov_base;
         iov[0].iov_len = key.iov_len;
-        iov[1].iov_base = &upper_value;
-        iov[1].iov_len = value_len;
-        value_type->betoh(&upper_value);
+        iov[1].iov_base = &new_node_id;
+        iov[1].iov_len = sizeof(new_node_id);
+        new_node_id = be32toh(new_node_id);
         // 插入
-        std::pair<bool, unsigned int> ret = now_node.insertRecord(iov);
+        std::pair<bool, unsigned int> insert_result = cur_node.insertRecord(iov);
+
+        // 特殊情况：插入位置在Node头 -> 与普通情况统一
+
+        // 特殊情况：插入位置在Node尾
+        if(insert_result.second == cur_node.getSlots() - 1){
+            unsigned int node_tail = insert_result.second;
+            Node latter_node, former_child, latter_child;
+
+            // 获得cur_node中，倒数第一个和倒数第二个record中存储的key、record
+            // 其中倒数第一个record的键-值就是key-new_node_id
+            Record last1_record, last2_record; // 改动前的倒数第一个和倒数第二个record
+            cur_node.refslots(node_tail - 1, last2_record);
+            cur_node.refslots(node_tail, last1_record);
+            int last1_key, last1_value, last2_key, last2_value;
+            unsigned int keylen_1, valuelen_1, keylen_2, valuelen_2;
+            last1_record.getByIndex((char*) &last1_key, &keylen_1, KEY_INDEX);
+            last1_record.getByIndex((char*) &last1_value, &valuelen_1, VALUE_INDEX);
+            last2_record.getByIndex((char*) &last2_key, &keylen_2, KEY_INDEX);
+            last2_record.getByIndex((char*) &last2_value, &valuelen_2, VALUE_INDEX);
+            last1_key = be32toh(last1_key);
+            last1_value = be32toh(last1_value);
+            last2_key = be32toh(last2_key);
+            last2_value = be32toh(last2_value);
+
+            // 获得latter_node
+            unsigned int &latter_node_id = last2_value;
+            attach_node(latter_node, latter_node_id);
+
+            // 获得former_child
+            attach_node(former_child, latter_node.get_left());
+
+            // 获得latter_child
+            attach_node(latter_child, new_node_id);
+
+            // 删除cur_node的倒数第二个和倒数第一个record
+            cur_node.deallocate(node_tail - 1);
+            cur_node.deallocate(node_tail - 1);
+
+            // 构造新的倒数第二个record和倒数第一个record的iovec
+            latter_node_id = htobe32(latter_node_id);
+
+            std::vector<struct iovec> last1(2);
+            last1[0].iov_base = key.iov_base;
+            last1[0].iov_len = key.iov_len;
+            last1[1].iov_base = &latter_node_id;
+            last1[1].iov_len = sizeof(latter_node_id);
+
+            last2_key = htobe32(last2_key);
+            last2_value = htobe32(last2_value);
+
+            std::vector<struct iovec> last2(2);
+            last2[0].iov_base = &last2_key;
+            last2[0].iov_len = sizeof(last2_key);
+            last2[1].iov_base = &(latter_node.get_left());
+            last2[1].iov_len = sizeof(latter_node.get_left());
+
+            // 将新的倒数第二个和倒数第一个record插入
+            cur_node.insertRecord(last1);
+            cur_node.insertRecord(last2);
+
+            latter_node.setNext(new_node_id);
+        }
+
+
+
         // 如果插入的地方为最后一个槽位，则需要调整各record指向信息
-        if(ret.second == now_node.getSlots() - 1){
-            now_node.deallocate(ret.second);
-            unsigned int next_node = now_node.getNext();
+        if(insert_result.second == cur_node.getSlots() - 1){
+            cur_node.deallocate(insert_result.second);
+            unsigned int next_node = cur_node.getNext();
             value_type->htobe(&next_node);
             iov[0].iov_base = upper_key;
             iov[0].iov_len = key.iov_len;
             iov[1].iov_base = &tmpvalue;
             iov[1].iov_len = value_len;
-            now_node.setNext(upper_value);
-            now_node.insertRecord(iov);
+            cur_node.setNext(upper_value);
+            cur_node.insertRecord(iov);
         }
         // 插入的地方不是最后一个槽位，则为一般情况
         else{
             Record next_record;
-            now_node.refslots(ret.second + 1, next_record);
+            cur_node.refslots(ret.second + 1, next_record);
             void *next_key = new char [key.iov_len];
             unsigned int next_value;
             next_record.getByIndex((char *) next_key, (unsigned int *) &key.iov_len, 0);
             next_record.getByRecord((char *) &next_value, (unsigned int *) &value_len, 1);
 
             // 将相邻的两块位置都清出来
-            now_node.deallocate(ret.second);
-            now_node.deallocate(ret.second);
+            cur_node.deallocate(ret.second);
+            cur_node.deallocate(ret.second);
             
             value_type->htobe(&upper_value);
             std::vector<struct iovec> pre_iov(2);
@@ -148,8 +208,8 @@ void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
             next_iov[0].iov_len = key.iov_len;
             next_iov[1].iov_base = &upper_value;
             next_iov[1].iov_len = value_len;
-            now_node.insertRecord(pre_iov);
-            now_node.insertRecord(next_iov);
+            cur_node.insertRecord(pre_iov);
+            cur_node.insertRecord(next_iov);
         }
     }
 }
