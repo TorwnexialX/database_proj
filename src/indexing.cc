@@ -76,8 +76,8 @@ bool Node::same_key(struct iovec key, unsigned int index){
 
     refslots(index, record);
     unsigned char *pkey;
-    unsigned int plen;
-    record.refByIndex(&pkey, &plen, KEY_INDEX);
+    unsigned int len;
+    record.refByIndex(&pkey, &len, KEY_INDEX);
 
     if (memcmp(pkey, key.iov_base, len) == 0) return true;
     else return false;
@@ -105,66 +105,22 @@ void Bptree::insert_to_index(struct iovec key, unsigned int new_node_id){
         iov[1].iov_len = sizeof(new_node_id);
         new_node_id = be32toh(new_node_id);
 
+        // TODO: 普通分裂
+        // TODO: 根节点分裂的特殊情况
+
         // 将给定键值对插入cur_record
         Node cur_node;
         attach_node(cur_node, node_parent);
         std::pair<bool, unsigned int> insert_result = cur_node.insertRecord(iov);
 
-        // 特殊情况：插入位置在Node尾
-        if(insert_result.second == cur_node.getSlots() - 1){
-            // 获得cur_node的最后一个record的索引
-            unsigned int node_tail = insert_result.second;
+        // 非根节点分裂
 
-            // 获得cur_node中，倒数第二个record中存储的key、value
-            Record last2_record; 
-            cur_node.refslots(node_tail - 1, last2_record);
-            int last2_key, last2_value;
-            unsigned int keylen, valuelen;
-            last2_record.getByIndex((char*) &last2_key, &keylen, KEY_INDEX);
-            last2_record.getByIndex((char*) &last2_value, &valuelen, VALUE_INDEX);
-            last2_key = be32toh(last2_key);
-            last2_value = be32toh(last2_value);
-
-            // 获得latter_node
-            Node latter_node;
-            unsigned int &latter_node_id = last2_value;
-            attach_node(latter_node, latter_node_id);
-
-            // 删除cur_node的倒数两个record
-            cur_node.deallocate(node_tail - 1);
-            cur_node.deallocate(node_tail - 1);
-
-            // 构造新的倒数第二个record
-            last2_key = htobe32(last2_key);
-            last2_value = htobe32(last2_value);
-
-            std::vector<struct iovec> last2(2);
-            last2[0].iov_base = &last2_key;
-            last2[0].iov_len = sizeof(last2_key);
-            last2[1].iov_base = &(latter_node.get_left());
-            last2[1].iov_len = sizeof(latter_node.get_left());
-
-            cur_node.insertRecord(last2);
-
-            // 构造新的倒数第一个record
-            latter_node_id = htobe32(latter_node_id);
-
-            std::vector<struct iovec> last1(2);
-            last1[0].iov_base = key.iov_base;
-            last1[0].iov_len = key.iov_len;
-            last1[1].iov_base = &latter_node_id;
-            last1[1].iov_len = sizeof(latter_node_id);
-
-            cur_node.insertRecord(last1);
-
-            // 设置latter_node的最左侧孩子节点
-            latter_node.setNext(new_node_id);
-        }
-
-        // 一般情况：不用处理
+        // 根节点分裂：特殊，设置最左侧子节点域
     }
 
     // 分裂情况
+
+
 }
 
 bool Bptree::insert(struct iovec key, struct iovec value){
@@ -249,7 +205,8 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             attach_node(new_root, new_root_id);
             superblock.setRoot(new_root_id);
             track.push(new_root_id);
-            // new root node没有设置next
+            // new root 设置next(最左)
+            // new root 插入parent
         }
 
         /* 向上添加过程为写入 */
