@@ -10,31 +10,46 @@
 using namespace db;
 
 TEST_CASE("db/indexing.cc"){
-    section("Node::is_leaf");
+    SECTION("Node::leaf"){
+        //打开表
+        Table table;
+        table.open("table"); // ATTENTION: 后期需要改成别的表
+        //构建一个节点
+        unsigned int node_id = table.allocate();
+        BufDesp *desp = kBuffer.borrow(table.name_.c_str(), node_id);
+        Node node;
+        node.attach(desp->buffer);
+        // 设置为叶子节点
+        node.set_leaf(true);
+        REQUIRE(node.is_leaf() == true);
+        // 设置为非叶子节点
+        node.set_leaf(false);
+        REQUIRE(node.is_leaf() == false);
+        // 删除节点
+        table.deallocate(node_id);
+    }
 
-    section("Node::set_leaf");
+    // SECTION("Node::get_left");
 
-    section("Node::get_left");
+    // SECTION("Node::set_left");
 
-    section("Node::set_left");
+    // SECTION("Node::same_key");
 
-    section("Node::same_key");
+    // SECTION("Bptree::set_table");
 
-    section("Bptree::set_table");
+    // SECTION("Bptree::attach_node");
 
-    section("Bptree::attach_node");
+    // SECTION("Bptree::node_append");
 
-    section("Bptree::node_append");
+    // SECTION("Bptree::get_root");
 
-    section("Bptree::get_root");
+    // SECTION("Bptree::find_leaf");
 
-    section("Bptree::find_leaf");
-
-    section("Bptree::reset_track");
+    // SECTION("Bptree::reset_track");
     
-    section("Bptree::search");
+    // SECTION("Bptree::search");
 
-    section("Bptree::insert");
+    // SECTION("Bptree::insert");
 
-    section("Bptree::remove");
+    // SECTION("Bptree::remove");
 }

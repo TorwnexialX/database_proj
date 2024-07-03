@@ -43,7 +43,7 @@ namespace db {
 
         // 判断当前节点第record_index个record中的键值是否与给定的key一致
         bool same_key(struct iovec key, unsigned int record_index);
-    }
+    };
 
     class Bptree {
         public:
@@ -87,5 +87,5 @@ namespace db {
 
         // 根据给定key在bptree上删除，返回是否成功
         bool remove(struct iovec key);
-    }
+    };
 }
