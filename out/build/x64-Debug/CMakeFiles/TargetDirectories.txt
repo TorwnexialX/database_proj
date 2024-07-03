@@ -1,8 +1,0 @@
-D:/桌面/db/out/build/x64-Debug/CMakeFiles/edit_cache.dir
-D:/桌面/db/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir
-D:/桌面/db/out/build/x64-Debug/src/CMakeFiles/dbimpl.dir
-D:/桌面/db/out/build/x64-Debug/src/CMakeFiles/edit_cache.dir
-D:/桌面/db/out/build/x64-Debug/src/CMakeFiles/rebuild_cache.dir
-D:/桌面/db/out/build/x64-Debug/tests/CMakeFiles/utest.dir
-D:/桌面/db/out/build/x64-Debug/tests/CMakeFiles/edit_cache.dir
-D:/桌面/db/out/build/x64-Debug/tests/CMakeFiles/rebuild_cache.dir
