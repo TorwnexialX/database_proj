@@ -87,5 +87,8 @@ namespace db {
 
         // 根据给定key在bptree上删除，返回是否成功
         bool remove(struct iovec key);
+
+        // 清空树
+        void clear_tree(unsigned int root_id);
     };
 }

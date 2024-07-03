@@ -4,6 +4,54 @@
 #include "db/indexing.h"
 
 namespace db{
+void Bptree::clear_tree(unsigned int root_id)
+{
+    std::queue<unsigned int> find_nodes;
+    std::queue<unsigned int> record_nodes;
+    find_nodes.push(root_id);
+    record_nodes.push(root_id);
+    while(!find_nodes.empty()){
+        Node node;
+        unsigned int cur_node_id = find_nodes.front();
+        find_nodes.pop();
+        attach_node(node, cur_node_id);
+        node.setTable(table_);
+        for (unsigned int i = 0; i < node.getSlots(); ++i){
+            Slot *slot = node.getSlotsPointer() + i;
+            Record record;
+            record.attach(
+                node.buffer_ + be16toh(slot->offset), be16toh(slot->length));
+            unsigned char *pkey;
+            unsigned int key_len;
+            int key;
+            record.refByIndex(&pkey, &key_len, KEY_INDEX);
+            memcpy(&key, pkey, key_len);
+            key = be32toh(key);
+
+            unsigned char *pvalue;
+            unsigned int value;
+            unsigned int value_len;
+            record.refByIndex(&pvalue, &value_len, VALUE_INDEX);
+            memcpy(&value, pvalue, value_len);
+            value = be32toh(value);
+
+            if(!node.is_leaf()){
+                find_nodes.push(value);
+                record_nodes.push(value);
+            }
+        }
+        if (!node.is_leaf()){
+            unsigned int next_node_id = node.getNext();
+            find_nodes.push(next_node_id);
+            record_nodes.push(next_node_id);
+        }
+    }
+    while(!record_nodes.empty()){
+        table_->deallocate(record_nodes.front());
+        record_nodes.pop();
+    }
+}
+
 /* key, value均各对应一个 struct iovec */
 // 根据给定key在bptree上查找，返回（是否成功，对应value）
 std::pair<bool, struct iovec> Bptree::search(struct iovec key) {

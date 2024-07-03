@@ -486,7 +486,27 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(search_result.second.iov_base == &unique_value);
         system("pause");
         
-        // 清空树(还未实现)
+        // 清空树
+        tree.clear_tree(super.getRoot());
+        super.setRoot(0);
+        // 设置树的阶数
+        // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
+        super.setOrder(200);
+
+        //连续插入数据
+        //在我们的测试中对于500阶的索引树，datablock_num可达到4000000
+        int success_num = 0;
+        // ATTENTION:老师代码中插入数据数选择了1000
+        int node_num = 1000;
+        for (int i = 0; i < node_num; ++i){
+            key = htobe32(i);
+            content_insert = insert_preparation(key, value);
+            key_insert = content_insert.first;
+            value_insert = content_insert.second;
+            success_insert = tree.insert(key_insert, value_insert);
+            if (success_insert == true) success_num++;
+        }
+        REQUIRE(super.getRoot() != 0);
     }
 
     // SECTION("Bptree::remove");
