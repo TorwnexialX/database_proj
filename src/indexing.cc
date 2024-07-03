@@ -53,7 +53,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
         lb_index -= if_same ? 0 : 1;
 
         Record lb_record;
-        refslots(lb_index, lb_record);
+        cur_node.refslots(lb_index, lb_record);
         lb_record.getByIndex((char *)&child, &child_len, VALUE_INDEX);
         // TODO: key和lb_key的长度，keylen, keylen_lb应该是一样的，但现在有着不同的类型和不同的名词名称
         child = be32toh(child);
@@ -65,7 +65,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
 
 Node Bptree::node_append(Node *node){
     Node new_node;
-    unsigned int new_id = table_.allocate(1);
+    unsigned int new_id = table_->allocate();
     attach_node(new_node, new_id);
     new_node.setNext(node->getNext());
     node->setNext(new_node.getSelf());
@@ -92,21 +92,12 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     superblock.attach(desp->buffer);
     desp->relref();
 
-    // 包装成iov
-    void *dup_key = new char[key.iov_len];
-    memcpy(dup_key, key.iov_base, key.iov_len);
-    void *dup_value = new char[value.iov_len];
-    memcpy(dup_value, value.iov_base, value.iov_len);
+    // 用于存储key-value对
     std::vector<struct iovec> iov(2);
-    // 不确定iov_base需不需要转成(unsigned int *)
-    iov[0].iov_base = dup_key;
-    iov[0].iov_len  = key.iov_len;
-    iov[1].iov_base = dup_value;
-    iov[1].iov_len  = value.iov_len;
 
     // B+树为空树
     if (superblock.getNodecounts() == 0) {
-        unsigned int newroot = table_->allocate(1);
+        unsigned int newroot = table_->allocate();
         superblock.setRoot(newroot);
         Node cur_node;
         cur_node.setTable(table_);
@@ -125,7 +116,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     unsigned int lb_index = former_node.searchRecord(key.iov_base, key.iov_len);
 
     // 如果要插入的记录项已存在
-    if same_key(key, lb_index) return false;
+    if (former_node.same_key(key, lb_index)) return false;
 
     unsigned int node_id = leaf_id;
 
@@ -134,23 +125,21 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         // 插入k-v对
         Node cur_node;
         attach_node(cur_node, node_id);
-        std::vector<struct iovec> iov(2);
         iov[0] = key;
         iov[1] = value;
         cur_node.insertRecord(iov);
 
         // 判断是否分裂
-        if (cur_node.getSlots() < super.getOrder() - 1) return true;
+        if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
 
         // 执行分裂操作
         // 1. 创建新node
         Node next_node = node_append(&cur_node);
         // 如果当前节点为叶子结点，则next_node需要设置为叶子结点
-        if (cur_node.get_leaf() == true) next_node.set_leaf(true);
-        // 2. 将cur_node数据分开，一部分放入next_node
-        // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
+        if (cur_node.is_leaf() == true) next_node.set_leaf(true);
+        // 2. 将cur_node数据分开，其中(order + 1) / 2条record放入next_node
         unsigned short mid_record = cur_node.getSlots() / 2;
-        while(cur_node.getSlots() > (n - 1) / 2){
+        while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
             Record record;
             cur_node.refslots(mid_record, record);
             next_node.copyRecord(record);
@@ -183,13 +172,12 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     Node cur_node;
     unsigned int cur_node_id = node_id;
     attach_node(cur_node, cur_node_id);
-    std::vector<struct iovec> iov(2);
     iov[0] = key;
     iov[1] = value;
     cur_node.insertRecord(iov);
 
     // 判断是否分裂
-    if (cur_node.getSlots() < super.getOrder() - 1) return true;
+    if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
 
     // 执行分裂操作
     // 1. 创建新node
@@ -197,7 +185,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     // 2. 将cur_node数据分开，一部分放入next_node
     // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
     unsigned short mid_record = cur_node.getSlots() / 2;
-    while(cur_node.getSlots() > (n - 1) / 2){
+    while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
         Record record;
         cur_node.refslots(mid_record, record);
         next_node.copyRecord(record);
@@ -215,12 +203,11 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     next_node_id = htobe32(next_node_id);
 
     // 创建新的根节点
-    unsigned int new_root_id = table_->allocate(1);
+    unsigned int new_root_id = table_->allocate();
     Node new_root;
     attach_node(new_root, new_root_id);
 
     // 在新的根节点中加入新的record
-    std::vector<struct iovec> iov(2);
     iov[0].iov_base = &head_key;
     iov[0].iov_len = sizeof(head_key);
     iov[1].iov_base = &next_node_id;
