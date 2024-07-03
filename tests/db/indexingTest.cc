@@ -83,38 +83,22 @@ TEST_CASE("db/indexing.cc"){
         std::pair<bool, unsigned int> ret = tree.search(empty_test_key);
         REQUIRE(ret.first == false);
         // 构建一个根节点
-        unsigned int root_id = table.allocate();
-        REQUIRE(table.indexCount() == 1);
+        unsigned int root_id = table_two.allocate();
+        REQUIRE(table_two.indexCount() == 1);
         super.setIndexroot(root_id);
         // 读根节点，根节点设置为叶子节点
         Node root_node;
         root_node.setTable(&table_two);
-        root_node.setTable(&table);
         attach_node(root_node, root_id);
         root_node.set_leaf(1);
-
         // 给根节点手动插入记录
         // 记录1
         // 此时树的结构为      10
-        //         left_child
+        //         mid_child
         int key = 10;
-        unsigned int left_child = table.allocate();
-        REQUIRE(table.indexCount() == 2);
+        unsigned int mid_child = table_two.allocate();
+        REQUIRE(table_two.indexCount() == 2);
         std::vector<struct iovec> iov(2);
-        key = htobe32(key);
-        left_child = htobe32(left_child);
-        iov[0].iov_base = &key;
-        iov[0].iov_len = 4;
-        iov[1].iov_base = &left_child;
-        iov[1].iov_len = 4;
-        root_node.insertRecord(iov);
-        left_child = be32toh(left_child);
-        // 记录2
-        // 此时树的结构为      10    20
-        //           left_child    mid_child
-        key = 20;
-        unsigned int mid_child = table.allocate();
-        REQUIRE(table.indexCount() == 3);
         key = htobe32(key);
         mid_child = htobe32(mid_child);
         iov[0].iov_base = &key;
@@ -123,6 +107,20 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = 4;
         root_node.insertRecord(iov);
         mid_child = be32toh(mid_child);
+        // 记录2
+        // 此时树的结构为      10         20
+        //                      mid_child    right_child
+        key = 20;
+        unsigned int right_child = table_two.allocate();
+        REQUIRE(table_two.indexCount() == 3);
+        key = htobe32(key);
+        right_child = htobe32(right_child);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = 4;
+        iov[1].iov_base = &right_child;
+        iov[1].iov_len = 4;
+        root_node.insertRecord(iov);
+        right_child = be32toh(right_child);
         // 根节点是叶子节点
         ret = tree.search(iov);
         REQUIRE(ret.first == true);
@@ -131,9 +129,85 @@ TEST_CASE("db/indexing.cc"){
         // 将根节点设置为非叶子节点
         root_node.set_leaf(0);
         // 记录3
-        // 此时树的结构为      10    20    30
-        //       left_child     mid_child     right_child
-        
+        // 此时树的结构为      10           20
+        //       left_child      mid_child     right_child
+        unsigned int left_child = table_two.allocate();
+        root_node.setNext(left_child);
+        // 搜索左边，先将left_child设置为叶子节点
+        attach_node(root_node, left_child);
+        root_node.set_leaf(1);
+        key = 5;
+        key = htobe32(key);
+        struct iovec iov_search;
+        iov_search.iov_base = &key;
+        iov_search.iov_len = sizeof(int);
+        ret = tree.index_search(iov_search);
+        REQUIRE(ret.first == true);
+        REQUIRE(ret.second == left_child);
+        int track = btree.route.top();
+        REQUIRE(track == root_id);
+        REQUIRE(tree.track.size() == 1);
+        tree.track.pop();
+        // 搜索中间，把中间节点设为叶子节点
+        attach_node(root_node, mid_child);
+        root_node.set_leaf(1);
+        key = 15;
+        key = htobe32(key);
+        iov_search.iov_base = &key;
+        iov_search.iov_len = sizeof(int);
+        ret = tree.index_search(iov_search);
+        REQUIRE(ret.first == true);
+        REQUIRE(ret.second == mid_child);
+        track = btree.track.top();
+        REQUIRE(track == root_id);
+        REQUIRE(tree.track.size() == 1);
+        tree.track.pop();
+        // 搜索右边，把右节点设为叶子节点
+        attach_node(root_node, right_child);
+        root_node.set_leaf(1);
+        key = 25;
+        key = htobe32(key);
+        iov_search.iov_base = &key;
+        iov_search.iov_len = sizeof(int);
+        ret = tree.index_search(iov_search);
+        REQUIRE(ret.first == true);
+        REQUIRE(ret.second == right_child);
+        track = tree.track.top();
+        REQUIRE(track == root_id);
+        REQUIRE(tree.track.size() == 1);
+        tree.track.pop();
+        //搜索分界点20，测试是否跳转正确
+        key = 20;
+        key = htobe32(key);
+        iov_search.iov_base = &key;
+        iov_search.iov_len = sizeof(int);
+        ret = tree.index_search(iov_search);
+        REQUIRE(ret.first == true);
+        REQUIRE(ret.second == right_child);
+        track = tree.track.top();
+        REQUIRE(track == root_id);
+        REQUIRE(tree.track.size() == 1);
+        tree.track.pop();
+        //搜索分界点10，测试是否跳转正确
+        key = 10;
+        key = htobe32(key);
+        iov_search.iov_base = &key;
+        iov_search.iov_len = sizeof(int);
+        ret = tree.index_search(iov_search);
+        REQUIRE(ret.first == true);
+        REQUIRE(ret.second == mid_child);
+        track = tree.track.top();
+        REQUIRE(track == root_id);
+        REQUIRE(tree.track.size() == 1);
+        tree.track.pop();
+        //清空手动建的树
+        table_two.deallocate(root_id);
+        table_two.deallocate(left_child);
+        table_two.deallocate(mid_child);
+        table_two.deallocate(right_child);
+        super.setIndexroot(0);
+        REQUIRE(super.getIndexroot() == 0);
+        REQUIRE(table_two.indexCount() == 0);
     }
 
     SECTION("Bptree::insert");
