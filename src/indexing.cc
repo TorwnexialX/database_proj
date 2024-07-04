@@ -79,7 +79,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
     Node cur_node;
     attach_node(cur_node, root);
 
-    unsigned int child;
+    unsigned int child = root;
     unsigned int child_len;
 
     reset_track();
@@ -91,7 +91,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
         bool if_same = cur_node.same_key(key, lb_index); 
         
         // lb_index == 0 走left_node
-        if (lb_index == 0) {
+        if (lb_index == 0 && !if_same) {
             child = cur_node.get_left();
             child = be32toh(child);
             attach_node(cur_node, child);
@@ -101,6 +101,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
         lb_index -= if_same ? 0 : 1;
 
         Record lb_record;
+        int test_slots_num = cur_node.getSlots();
         cur_node.refslots(lb_index, lb_record);
         lb_record.getByIndex((char *)&child, &child_len, VALUE_INDEX);
         // TODO: key和lb_key的长度，keylen, keylen_lb应该是一样的，但现在有着不同的类型和不同的名词名称
@@ -288,6 +289,7 @@ void Bptree::attach_node(Node &node, unsigned int node_id){
     node.detach();
     BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), node_id);
     node.attach(desp->buffer);
+    node.setTable(table_);
 }
 
 }
