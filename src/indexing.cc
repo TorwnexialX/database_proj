@@ -245,7 +245,7 @@ void Bptree::attach_node(Node &node, unsigned int node_id){
 }
 
 bool remove(struct iovec key){
-      // 读取超级块
+   // 读取超级块
    SuperBlock superblock;
    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
    superblock.attach(desp->buffer);
@@ -255,11 +255,97 @@ bool remove(struct iovec key){
    if (superblock.getNodecounts() == 0) return false;
 
    // B+树非空
-   Node former_node;
+   Node leaf_node;
    reset_track();
    unsigned int leaf_id = find_leaf(key);
-   attach_node(former_node, leaf_id);
-   unsigned int lb_index = former_node.searchRecord(key.iov_base, key.iov_len);
+   attach_node(leaf_node, leaf_id);
+   unsigned int lb_index = leaf_node.searchRecord(key.iov_base, key.iov_len);
+
+   // 如果要删除的记录项不存在
+   if (!former_node.same_key(key, lb_index)) return false;
+
+   // 要删除的项在该叶节点中，直接删除其中对应record
+   leaf_node.deallocate(leaf_id);
+
+   // 每个record中最小的项数
+   unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
+
+   // 对于当前项数小于最小值时
+   while (leaf_node.getSlots() < min_keys) {
+      // 栈空，说明已经回溯到了根节点
+      if (track.empty()) {
+         // 根节点为空，说明树目前只有一个空的根节点，故将该树设置为空树
+         if (leaf_node.getSlots() == 0) {
+            superblock.setRoot(0);
+            superblock.setNodecounts(0);
+         }
+         return true;
+      }
+
+      // 获取parent节点
+      unsigned int parent_id = track.top();
+      track.pop();
+      Node parent_node;
+      attach_node(parent_node, parent_id);
+
+      // 获取sibling节点
+      unsigned int sibling_id;
+      Node sibling_node;
+
+      // 在parent中查询当前key对应的record
+      unsigned int sibling_info_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
+      unsigned int sibling_key;
+
+      // 默认从左sibling中借键
+
+      // 对于sibling_info_idx > 0的情况，parent中该key对应record的左record中存储着左sibling的信息
+      if (sibling_info_idx > 0) {
+         sibling_info_idx--;
+         // 获得左sibling的info的record
+         Record sibling_info;
+         parent_node.refslots(sibling_info_idx, sibling_info);
+         unsigned int sibling_key_len;
+         sibling_info.getByIndex((char *)&sibling_key, &sibling_key_len, KEY_INDEX);
+         sibling_key = be32toh(sibling_key);
+      }
+
+      // 获得sibling节点id
+      sibling_id = (sibling_info_idx == 0) ? leaf_node.get_left() : sibling_key;
+      attach_node(sibling_node, sibling_id);
+
+      if (sibling_node.getSlots() > min_keys) {
+         if (sibling_info_idx == 0) {
+            leaf_node.copyRecord(sibling_node.getSlots() - 1);
+            sibling_node.deallocate(sibling_node.getSlots() - 1);
+         } 
+         else {
+            leaf_node.copyRecord(0);
+            sibling_node.deallocate(0);
+         }
+         return true;
+      } 
+      else {
+         if (sibling_info_idx == 0) {
+               sibling_node.setNext(leaf_node.getNext());
+               for (unsigned int i = 0; i < leaf_node.getSlots(); i++) {
+                  sibling_node.copyRecord(i);
+               }
+               leaf_node.deallocateAll();
+         } 
+         else {
+               leaf_node.setNext(sibling_node.getNext());
+               for (unsigned int i = 0; i < sibling_node.getSlots(); i++) {
+                  leaf_node.copyRecord(i);
+               }
+               sibling_node.deallocateAll();
+         }
+         parent_node.deallocate(sibling_info_idx);
+         leaf_node = parent_node;
+      }
+    }
+
+    return true;
+
 }
 
 }
