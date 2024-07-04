@@ -68,6 +68,11 @@ TEST_CASE("db/indexing.cc"){
         field.type = findDataType("INT");
         relation.fields.push_back(field);
 
+        relation.count = 2;
+        relation.key = 0;
+
+        int ret = kSchema.create("table_two", relation);
+
         // 打开新table并绑定到Bptree上
         Table table_two;
         table_two.open("table_two");
@@ -122,7 +127,7 @@ TEST_CASE("db/indexing.cc"){
         Node root_node;
         root_node.setTable(&table_two);
         tree.attach_node(root_node, root_id);
-        root_node.set_leaf(1);
+        root_node.set_leaf(true);
         // 给根节点手动插入记录
         // 记录1
         // 此时树的结构为      10
@@ -134,9 +139,9 @@ TEST_CASE("db/indexing.cc"){
         key = htobe32(key);
         mid_child = htobe32(mid_child);
         iov[0].iov_base = &key;
-        iov[0].iov_len = 4;
+        iov[0].iov_len = sizeof(int);
         iov[1].iov_base = &mid_child;
-        iov[1].iov_len = 4;
+        iov[1].iov_len = sizeof(int);
         root_node.insertRecord(iov);
         mid_child = be32toh(mid_child);
         // 记录2
@@ -170,7 +175,7 @@ TEST_CASE("db/indexing.cc"){
         root_node.setNext(left_child);
         // 搜索左边，先将left_child设置为叶子节点
         tree.attach_node(root_node, left_child);
-        root_node.set_leaf(1);
+        root_node.set_leaf(true);
         key = 5;
         key = htobe32(key);
         iov_search.iov_base = &key;
@@ -184,7 +189,7 @@ TEST_CASE("db/indexing.cc"){
         tree.track.pop();
         // 搜索中间，把中间节点设为叶子节点
         tree.attach_node(root_node, mid_child);
-        root_node.set_leaf(1);
+        root_node.set_leaf(true);
         key = 15;
         key = htobe32(key);
         iov_search.iov_base = &key;
@@ -198,7 +203,7 @@ TEST_CASE("db/indexing.cc"){
         tree.track.pop();
         // 搜索右边，把右节点设为叶子节点
         tree.attach_node(root_node, right_child);
-        root_node.set_leaf(1);
+        root_node.set_leaf(true);
         key = 25;
         key = htobe32(key);
         iov_search.iov_base = &key;
