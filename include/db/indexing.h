@@ -89,6 +89,6 @@ namespace db {
         bool remove(struct iovec key);
 
         // 清空树
-        void clear_tree(unsigned int root_id);
+        void clear_tree();
     };
 }

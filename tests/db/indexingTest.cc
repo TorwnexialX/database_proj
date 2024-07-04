@@ -91,38 +91,76 @@ TEST_CASE("db/indexing.cc"){
 
     SECTION("Bptree::clear_tree")
     {
-        ////打开表
-        //Table table_two;
-        //table_two.open("table_two");
-        //Bptree tree;
-        //tree.set_table(&table_two, 0, 1);
-        //// 读超级块
-        //SuperBlock super;
-        //BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
-        //super.attach(desp->buffer);
-        //desp->relref();
-        //REQUIRE(super.getRoot() == 0);
-        //// 构建一个根节点
-        //unsigned int root_id = table_two.allocate();
-        //REQUIRE(table_two.dataCount() == 1);
-        //super.setRoot(root_id);
-        //super.setNodecounts(1);
-        //REQUIRE(super.getRoot() == root_id);
-        //int key = 10;
-        //// 插入三个节点
-        //unsigned int mid_child = table_two.allocate();
-        //REQUIRE(table_two.dataCount() == 2);
-        //super.setNodecounts(2);
-        //unsigned int right_child = table_two.allocate();
-        //REQUIRE(table_two.dataCount() == 3);
-        //super.setNodecounts(3);
-        //unsigned int left_child = table_two.allocate();
-        //REQUIRE(table_two.dataCount() == 4);
-        //super.setNodecounts(4);
-        //tree.clear_tree(root_id);
-        //REQUIRE(table_two.dataCount() == 0);
-        //REQUIRE(super.getNodecounts() == 0);
-        //REQUIRE(super.getRoot() == 0);
+        //打开表
+        Table table_two;
+        table_two.open("table_two");
+        Bptree tree;
+        tree.set_table(&table_two, 0, 1);
+        // 读超级块
+        SuperBlock super;
+        BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
+        super.attach(desp->buffer);
+        desp->relref();
+        REQUIRE(super.getRoot() == 0);
+        // 构建一个根节点
+        unsigned int root_id = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 1);
+        super.setRoot(root_id);
+        super.setNodecounts(1);
+        REQUIRE(super.getRoot() == root_id);
+        // 读根节点
+        Node root_node;
+        root_node.setTable(&table_two);
+        tree.attach_node(root_node, root_id);
+        // 插入三个节点
+        int key = 10;
+        unsigned int mid_child = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 2);
+        super.setNodecounts(2);
+        std::vector<struct iovec> iov(2);
+        key = htobe32(key);
+        mid_child = htobe32(mid_child);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &mid_child;
+        iov[1].iov_len = sizeof(int);
+        root_node.insertRecord(iov);
+        mid_child = be32toh(mid_child);
+        // 记录2
+        // 此时树的结构为      10         20
+        //                      mid_child    right_child
+        key = 20;
+        unsigned int right_child = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 3);
+        super.setNodecounts(3);
+        key = htobe32(key);
+        right_child = htobe32(right_child);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &right_child;
+        iov[1].iov_len = sizeof(int);
+        root_node.insertRecord(iov);
+        right_child = be32toh(right_child);
+        // 记录3
+        // 此时树的结构为
+        //                     10               20
+        //       left_child(5)      mid_child(3)     right_child(4)
+        unsigned int left_child = table_two.allocate();
+        super.setNodecounts(4);
+        root_node.setNext(left_child);
+
+        // 分别将left_child,mid_child,right_child设置为叶子节点
+        tree.attach_node(root_node, left_child);
+        root_node.set_leaf(true);
+        tree.attach_node(root_node, mid_child);
+        root_node.set_leaf(true);
+        tree.attach_node(root_node, right_child);
+        root_node.set_leaf(true);
+        // 测试清空树的功能
+        tree.clear_tree();
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getNodecounts() == 0);
+        REQUIRE(super.getRoot() == 0);
     }
 
     SECTION("Bptree::get_root")
@@ -137,30 +175,29 @@ TEST_CASE("db/indexing.cc"){
         BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
         super.attach(desp->buffer);
         desp->relref();
-        // 空树搜索
-        //REQUIRE(table_two.dataCount() == 0);
-        //REQUIRE(super.getRoot() == 0);
         // 测试get_root,根节点为空的情况
         std::pair<bool, unsigned int> root_test = tree.get_root();
-        //REQUIRE(root_test.first == false);
-        //REQUIRE(root_test.second == super.getRoot());
+        REQUIRE(root_test.first == false);
+        REQUIRE(root_test.second == super.getRoot());
         // 构建一个根节点
         unsigned int root_id = table_two.allocate();
-        //REQUIRE(table_two.dataCount() == 1);
+        REQUIRE(table_two.dataCount() == 1);
         super.setRoot(root_id);
         super.setNodecounts(1);
-        //REQUIRE(super.getRoot() == root_id);
+        // 读根节点，根节点设置为叶子节点
+        Node root_node;
+        root_node.setTable(&table_two);
+        tree.attach_node(root_node, root_id);
+        root_node.set_leaf(true);
+        REQUIRE(super.getRoot() == root_id);
         root_test = tree.get_root();
-        //REQUIRE(root_test.first == true);
-        //REQUIRE(root_test.second == super.getRoot());
+        REQUIRE(root_test.first == true);
+        REQUIRE(root_test.second == super.getRoot());
         //清空手动建的树
-        table_two.deallocate(root_id);
-        super.setRoot(0);
-        super.setNodecounts(0);
-        //REQUIRE(super.getRoot() == 0);
-        root_test = tree.get_root();
-        //REQUIRE(root_test.first == false);
-        //REQUIRE(root_test.second == 0);
+        tree.clear_tree();
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getNodecounts() == 0);
+        REQUIRE(super.getRoot() == 0);
     }
 
     SECTION("Bptree::find_leaf")
@@ -304,6 +341,11 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(track == root_id);
         REQUIRE(tree.track.size() == 1);
         tree.track.pop();
+
+        tree.clear_tree();
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getNodecounts() == 0);
+        REQUIRE(super.getRoot() == 0);
     }
 
     // SECTION("Bptree::reset_track");
@@ -577,7 +619,7 @@ TEST_CASE("db/indexing.cc"){
         system("pause");
         
         // 清空树
-        tree.clear_tree(super.getRoot());
+        tree.clear_tree();
         super.setRoot(0);
         // 设置树的阶数
         // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义

@@ -4,8 +4,18 @@
 #include "db/indexing.h"
 
 namespace db{
-void Bptree::clear_tree(unsigned int root_id)
+void Bptree::clear_tree()
 {
+    // 读取超级块
+    SuperBlock superblock;
+    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+    superblock.attach(desp->buffer);
+    desp->relref();
+
+    if (superblock.getNodecounts() == 0) return;
+
+    unsigned int root_id = superblock.getRoot();
+
     std::queue<unsigned int> find_nodes;
     std::queue<unsigned int> record_nodes;
     find_nodes.push(root_id);
@@ -16,6 +26,7 @@ void Bptree::clear_tree(unsigned int root_id)
         find_nodes.pop();
         attach_node(node, cur_node_id);
         node.setTable(table_);
+        int slots_num_test = node.getSlots();
         for (unsigned int i = 0; i < node.getSlots(); ++i){
             Slot *slot = node.getSlotsPointer() + i;
             Record record;
@@ -49,7 +60,9 @@ void Bptree::clear_tree(unsigned int root_id)
     while(!record_nodes.empty()){
         table_->deallocate(record_nodes.front());
         record_nodes.pop();
+        superblock.setNodecounts(superblock.getNodecounts() - 1);
     }
+    superblock.setRoot(0);
 }
 
 /* key, value均各对应一个 struct iovec */
