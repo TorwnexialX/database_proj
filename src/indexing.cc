@@ -268,6 +268,8 @@ bool remove(struct iovec key){
    // 要删除的项在该叶节点中，直接删除其中对应record
    leaf_node.deallocate(leaf_id);
 
+   if (leaf_node.getSelf() == superblock.getRoot()) return true;
+
    // 每个record中最小的项数
    unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
 
@@ -312,6 +314,46 @@ bool remove(struct iovec key){
 
       // 获得sibling节点id
       sibling_id = (sibling_info_idx == 0) ? leaf_node.get_left() : sibling_key;
+
+      // 对next域为0(无效)的node进行处理
+      if (sibling_id == 0) {
+         // 获取grand节点
+         unsigned int grand_id = track.top();
+         Node grand_node;
+         attach_node(grand_node, grand_id);
+
+         // 获取uncle节点
+         unsigned int uncle_id;
+         Node uncle_node;
+
+         // 在grand中查询当前key对应的record
+         unsigned int up1_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
+         unsigned int up1_key, up1_key_len;
+         Record up1_record;
+         parent_node.refslots(up1_idx, up1_record);
+         up1_record.getByIndex(&up1_key, &up1_key_len, KEY_INDEX);
+         unsigned int up2_idx = grand_node.searchRecord(up1_key, up1_key_len);
+         unsigned int uncle_idx = up2_idx - 1; // grand中存uncle_node信息的record的idx
+         //// 问题
+         unsigned int uncle_info_idx = grand_node.searchRecord(&sibling_key, sizeof(sibling_key));
+         unsigned int uncle_key;
+
+         // 默认从左sibling中借键
+
+         // 对于sibling_info_idx > 0的情况，parent中该key对应record的左record中存储着左sibling的信息
+         if (sibling_info_idx > 0) {
+            sibling_info_idx--;
+            // 获得左sibling的info的record
+            Record sibling_info;
+            parent_node.refslots(sibling_info_idx, sibling_info);
+            unsigned int sibling_key_len;
+            sibling_info.getByIndex((char *)&sibling_key, &sibling_key_len, KEY_INDEX);
+            sibling_key = be32toh(sibling_key);
+         }
+
+         // 获得sibling节点id
+         sibling_id = (sibling_info_idx == 0) ? leaf_node.get_left() : sibling_key;
+      }
       attach_node(sibling_node, sibling_id);
 
       if (sibling_node.getSlots() > min_keys) {
