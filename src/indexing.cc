@@ -71,6 +71,7 @@ Node Bptree::node_append(Node *node, bool is_leaf){
       new_node.setNext(node->getNext());
       node->setNext(new_node.getSelf());
    }
+   else new_node.setNext(0);
    return new_node;
 }
 
@@ -315,7 +316,7 @@ bool remove(struct iovec key){
 
       if (sibling_node.getSlots() > min_keys) {
          if (sibling_info_idx == 0) {
-            leaf_node.copyRecord(sibling_node.getSlots() - 1);
+            leaf_node.copyRecord(sibling_node);
             sibling_node.deallocate(sibling_node.getSlots() - 1);
          } 
          else {
