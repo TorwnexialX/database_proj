@@ -9,18 +9,6 @@
 
 using namespace db;
 
-std::pair<struct iovec, struct iovec> insert_preparation(int key, int value)
-{
-    struct iovec key_insert;
-    struct iovec value_insert;
-    key = htobe32(key);
-    key_insert.iov_base = &key;
-    key_insert.iov_len = sizeof(int);
-    value_insert.iov_base = &value;
-    value_insert.iov_len = sizeof(int);
-    return {key_insert, value_insert};
-}
-
 TEST_CASE("db/indexing.cc"){
     SECTION("Node::leaf"){
         //打开表
@@ -363,283 +351,452 @@ TEST_CASE("db/indexing.cc"){
          super.attach(desp->buffer);
          desp->relref();
 
-         REQUIRE(super.getNodecounts() == 4);
+         REQUIRE(super.getNodecounts() == 0);
 
-        
-        ////清空手动建的树
-        //table_two.deallocate(root_id);
-        //table_two.deallocate(left_child);
-        //table_two.deallocate(mid_child);
-        //table_two.deallocate(right_child);
-        //super.setRoot(0);
-        //REQUIRE(super.getRoot() == 0);
-        //REQUIRE(table_two.dataCount() == 0);
-    }
-
-    SECTION("Bptree::insert")
-    {
-        //打开表
-        Table table_two;
-        table_two.open("table_two");
-        Bptree tree;
-        tree.set_table(&table_two, 0, 1);
-        // 读超级块
-        SuperBlock super;
-        BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
-        super.attach(desp->buffer);
-        desp->relref();
-        // 空树搜索
-        REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getRoot() == 0);
-        struct iovec key_insert;
-        struct iovec value_insert;
-        
-        // 完成初始化，准备开始测试insert
-        super.setOrder(5);
-        // 从空树开始插入
+         // 构建一个根节点
+        unsigned int root_id = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 1);
+        super.setRoot(root_id);
+        super.setNodecounts(1);
+        // 读根节点
+        Node root_node;
+        root_node.setTable(&table_two);
+        tree.attach_node(root_node, root_id);
+        // 给根节点手动插入记录
+        // 记录1
+        // 此时树的结构为      10
+        //         mid_child
         int key = 10;
-        unsigned int value = rand() % 9999;
-        std::pair<struct iovec, struct iovec> content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        bool success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        std::pair<bool, struct iovec> search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-        // 是否正确设置了根节点
-        REQUIRE(super.getRoot() != 0);
-        
-        // 继续插入数据
-        key = 20;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 继续插入数据
-        key = 30;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 继续插入数据
-        key = 40;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-        
-        // 现在我们已经有数据：10,20,30,40
-        // 插入重复数据10，测试无法插入的情况
-        key = 10;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        REQUIRE(success_insert == false);
-
-        // TODO:弄清这个顶层Search功能是什么，为什么要这么测试，对代码进行修改
-        // 插入新数据，用于测试顶层Search功能(老师的代码这么说)
-        key = 50;
-        unsigned int unique_value = 312;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,20,30,40,50
-        key = 60;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,20,30,40,50,60
-        key = 70;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,20,30,40,50,60,70
-        key = 15;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,30,40,50,60,70
-        key = 25;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,25,30,40,50,60,70
-        key = 35;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,25,30,35,40,50,60,70
-        key = 45;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,60,70
-        key = 55;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,55,60,70
-        key = 65;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 插入新数据
-        // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,55,60,65,70
-        key = 75;
-        value = rand() % 9999;
-        content_insert = insert_preparation(key, value);
-        key_insert = content_insert.first;
-        value_insert = content_insert.second;
-        success_insert = tree.insert(key_insert, value_insert);
-        // 通过success_insert的值判断插入是否成功
-        REQUIRE(success_insert == true);
-        // 通过research判断插入是否成功
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.first == true);
-        REQUIRE(search_result.second.iov_base == &value);
-
-        // 测试顶层Search功能
-        struct iovec unique_key;
-        key = 50;
+        unsigned int mid_child = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 2);
+        super.setNodecounts(2);
+        std::vector<struct iovec> iov(2);
         key = htobe32(key);
-        unique_key.iov_base = &key;
-        unique_key.iov_len = sizeof(int);
-        search_result = tree.search(key_insert);
-        REQUIRE(search_result.second.iov_base == &unique_value);
-        system("pause");
+        mid_child = htobe32(mid_child);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &mid_child;
+        iov[1].iov_len = sizeof(int);
+        root_node.insertRecord(iov);
+        mid_child = be32toh(mid_child);
+        // 记录2
+        // 此时树的结构为      10         20
+        //                      mid_child    right_child
+        key = 20;
+        unsigned int right_child = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 3);
+        super.setNodecounts(3);
+        key = htobe32(key);
+        right_child = htobe32(right_child);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &right_child;
+        iov[1].iov_len = sizeof(int);
+        root_node.insertRecord(iov);
+        right_child = be32toh(right_child);
+        // 记录3
+        // 此时树的结构为
+        //                     10               20
+        //       left_child(5)      mid_child(3)     right_child(4)
+        unsigned int left_child = table_two.allocate();
+        super.setNodecounts(4);
+        root_node.setNext(left_child);
+        // 将left_child设置为叶子节点，并插入数据
+        Node left_node;
+        tree.attach_node(left_node, left_child);
+        left_node.set_leaf(true);
+        key = 3;
+        int value = 100;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        left_node.insertRecord(iov);
+        // 插入数据2
+        key = 5;
+        value = 200;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        left_node.insertRecord(iov);
+        // 插入数据3
+        key = 7;
+        value = 300;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        left_node.insertRecord(iov);
+        // 此时left_node: 6,7,8
+        // 将mid_child设置为叶子节点，并插入数据
+        Node mid_node;
+        tree.attach_node(mid_node, mid_child);
+        mid_node.set_leaf(true);
+        key = 13;
+        value = 400;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        mid_node.insertRecord(iov);
+        // 插入数据2
+        key = 15;
+        value = 500;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        mid_node.insertRecord(iov);
+        // 插入数据3
+        key = 17;
+        value = 600;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        mid_node.insertRecord(iov);
+        // 此时mid_node: 13,15,17
+        // 将right_child设置为叶子节点，并插入数据
+        Node right_node;
+        tree.attach_node(right_node, right_child);
+        right_node.set_leaf(true);
+        key = 23;
+        value = 700;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        right_node.insertRecord(iov);
+        // 插入数据2
+        key = 25;
+        value = 800;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        right_node.insertRecord(iov);
+        // 插入数据3
+        key = 27;
+        value = 900;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        right_node.insertRecord(iov);
+        // 此时right_node: 23,25,27
+        // 此时树的结构为
+        //                                     10                             20
+        //             3(100)  5(200)  7(300)      13(400)  15(500)  17(600)      23(700)  25(800)  27(900)
+        //                  (left_child)                  (mid_child)                   (right_child)
+        // 开始进行搜索函数测试
+        // 搜索left_child:5
+        struct iovec search_key;
+        key = 3;
+        key = htobe32(key);
+        search_key.iov_base = &key;
+        search_key.iov_len = sizeof(int);
+        std::pair<bool, struct iovec> search_result = tree.search(search_key);
+        REQUIRE(search_result.first == true);
+        value = 100;
+        value = htobe32(value);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
+        // 搜索mid_child:15
+        key = 15;
+        key = htobe32(key);
+        search_key.iov_base = &key;
+        search_key.iov_len = sizeof(int);
+        search_result = tree.search(search_key);
+        REQUIRE(search_result.first == true);
+        value = 500;
+        value = htobe32(value);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
+        // 搜索right_child:27
+        key = 27;
+        key = htobe32(key);
+        search_key.iov_base = &key;
+        search_key.iov_len = sizeof(int);
+        search_result = tree.search(search_key);
+        REQUIRE(search_result.first == true);
+        value = 900;
+        value = htobe32(value);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
+        // 搜索失败测试
+        key = 1;
+        key = htobe32(key);
+        search_key.iov_base = &key;
+        search_key.iov_len = sizeof(int);
+        search_result = tree.search(search_key);
+        REQUIRE(search_result.first == false);
+        value = 100;
+        value = htobe32(value);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len) == 0);
         
-        // 清空树
+        key = 30;
+        key = htobe32(key);
+        search_key.iov_base = &key;
+        search_key.iov_len = sizeof(int);
+        search_result = tree.search(search_key);
+        REQUIRE(search_result.first == false);
+        value = 1000;
+        value = htobe32(value);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len) == 0);
+        
+        //清空手动建的树
         tree.clear_tree();
-        super.setRoot(0);
-        // 设置树的阶数
-        // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
-        super.setOrder(200);
-
-        //连续插入数据
-        //在我们的测试中对于500阶的索引树，datablock_num可达到4000000
-        int success_num = 0;
-        // ATTENTION:老师代码中插入数据数选择了1000
-        int node_num = 1000;
-        for (int i = 0; i < node_num; ++i){
-            key = htobe32(i);
-            content_insert = insert_preparation(key, value);
-            key_insert = content_insert.first;
-            value_insert = content_insert.second;
-            success_insert = tree.insert(key_insert, value_insert);
-            if (success_insert == true) success_num++;
-        }
-        REQUIRE(super.getRoot() != 0);
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getNodecounts() == 0);
+        REQUIRE(super.getRoot() == 0);
     }
+
+    //SECTION("Bptree::insert")
+    //{
+    //    //打开表
+    //    Table table_two;
+    //    table_two.open("table_two");
+    //    Bptree tree;
+    //    tree.set_table(&table_two, 0, 1);
+    //    // 读超级块
+    //    SuperBlock super;
+    //    BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
+    //    super.attach(desp->buffer);
+    //    desp->relref();
+    //    // 空树搜索
+    //    REQUIRE(table_two.dataCount() == 0);
+    //    REQUIRE(super.getRoot() == 0);
+    //    
+    //    // 完成初始化，准备开始测试insert
+    //    super.setOrder(5);
+    //    // 从空树开始插入
+    //    int key = 10;
+    //    unsigned int value = rand() % 9999;
+    //    std::vector<struct iovec> insert_data = insert_preparation(key, value);
+    //    bool success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    std::pair<bool, struct iovec> search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+    //    // 是否正确设置了根节点
+    //    REQUIRE(super.getRoot() != 0);
+    //    
+    //    // 继续插入数据
+    //    key = 20;
+    //    value = rand() % 9999;
+    //    insert_data = insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 继续插入数据
+    //    key = 30;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 继续插入数据
+    //    key = 40;
+    //    value = rand() % 9999;
+    //    insert_data = insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+    //    
+    //    // 现在我们已经有数据：10,20,30,40
+    //    // 插入重复数据10，测试无法插入的情况
+    //    key = 10;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    REQUIRE(success_insert == false);
+
+    //    // TODO:弄清这个顶层Search功能是什么，为什么要这么测试，对代码进行修改
+    //    // 插入新数据，用于测试顶层Search功能(老师的代码这么说)
+    //    key = 50;
+    //    unsigned int unique_value = 312;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,20,30,40,50
+    //    key = 60;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,20,30,40,50,60
+    //    key = 70;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,20,30,40,50,60,70
+    //    key = 15;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,30,40,50,60,70
+    //    key = 25;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,25,30,40,50,60,70
+    //    key = 35;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,25,30,35,40,50,60,70
+    //    key = 45;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,60,70
+    //    key = 55;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,55,60,70
+    //    key = 65;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 插入新数据
+    //    // 现在我们已经有数据：10,15,20,25,30,35,40,45,50,55,60,65,70
+    //    key = 75;
+    //    value = rand() % 9999;
+    //    insert_data= insert_preparation(key, value);
+    //    success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //    // 通过success_insert的值判断插入是否成功
+    //    REQUIRE(success_insert == true);
+    //    // 通过research判断插入是否成功
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.first == true);
+    //    REQUIRE(search_result.second.iov_base == &value);
+
+    //    // 测试顶层Search功能
+    //    struct iovec unique_key;
+    //    key = 50;
+    //    key = htobe32(key);
+    //    unique_key.iov_base = &key;
+    //    unique_key.iov_len = sizeof(int);
+    //    search_result = tree.search(insert_data[0]);
+    //    REQUIRE(search_result.second.iov_base == &unique_value);
+    //    system("pause");
+    //    
+    //    // 清空树
+    //    tree.clear_tree();
+    //    super.setRoot(0);
+    //    // 设置树的阶数
+    //    // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
+    //    super.setOrder(200);
+
+    //    //连续插入数据
+    //    //在我们的测试中对于500阶的索引树，datablock_num可达到4000000
+    //    int success_num = 0;
+    //    // ATTENTION:老师代码中插入数据数选择了1000
+    //    int node_num = 1000;
+    //    for (int i = 0; i < node_num; ++i){
+    //        key = htobe32(i);
+    //        insert_data= insert_preparation(key, value);
+    //        success_insert = tree.insert(insert_data[0], insert_data[1]);
+    //        if (success_insert == true) success_num++;
+    //    }
+    //    REQUIRE(super.getRoot() != 0);
+    //}
 
     // SECTION("Bptree::remove");
 }
