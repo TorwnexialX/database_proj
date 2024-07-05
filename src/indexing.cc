@@ -42,6 +42,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
        unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
        bool if_same = cur_node.same_key(key, lb_index); 
        
+       // ATTENTION: 以下修正有误，查看另一branch是否正确，不行就用当前borrow_lsib的
        // lb_index == 0 走left_node
        if (lb_index == 0) {
            child = cur_node.get_left();
@@ -334,7 +335,8 @@ bool remove(struct iovec key){
          up1_record.getByIndex(&up1_key, &up1_key_len, KEY_INDEX);
          unsigned int up2_idx = grand_node.searchRecord(up1_key, up1_key_len);
          unsigned int uncle_idx = up2_idx - 1; // grand中存uncle_node信息的record的idx
-         //// 问题
+         
+         //// TODO：
          unsigned int uncle_info_idx = grand_node.searchRecord(&sibling_key, sizeof(sibling_key));
          unsigned int uncle_key;
 
@@ -386,9 +388,65 @@ bool remove(struct iovec key){
          leaf_node = parent_node;
       }
     }
-
     return true;
-
 }
 
+// key: 要删的key
+bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
+   if (track.empty()) return false; // 没有父节点则没有兄弟节点
+
+   // 获取父节点
+   unsigned int parent_id = track.top();
+   Node parent_node;
+   attach_node(parent_node, parent_id);
+
+   // 查找当前节点在父节点中的索引
+   unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
+   
+   bool if_same = parent_node.same_key(key, current_index);
+   current_index -= (if_same || current_index == 0) ? 0 : 1;
+   if (current_index == 0) return false; // 没有左兄弟
+
+
+   // 获取左兄弟节点的id信息
+   Record lsib_info;
+   unsigned int lsib_info_idx = current_index - 1;
+   unsigned int lsib_id;
+   parent_node.refslots(lsib_info_idx, lsib_info);
+   unsigned int lsib_id_len;
+   lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
+   lsib_id = be32toh(lsib_id);
+
+   // 获取左兄弟
+   Node left_sibling;
+   attach_node(left_sibling, lsib_id);
+
+   // 检查左兄弟是否有足够的项可以借
+   SuperBlock superblock;
+   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+   superblock.attach(desp->buffer);
+   desp->relref();
+
+   // 兄弟项不够借
+   unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
+   if (left_sibling.getSlots() <= min_entries) return false;
+
+   // 将左兄弟的最右侧项复制到当前节点
+   Record last_record;
+   left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
+   current_node.copyRecord(last_record);
+   left_sibling.deallocate(left_sibling.getSlots() - 1);
+
+   // 更新父节点中的相关键值
+   // TODO: 上层更新
+   // Record first_record;
+   // current_node.refslots(0, first_record);
+   // unsigned char *new_key;
+   // unsigned int new_key_len;
+   // first_record.refByIndex(&new_key, &new_key_len, KEY_INDEX);
+   // parent_record.setByIndex((char *)new_key, new_key_len, KEY_INDEX);
+   // parent_node.writeBack(current_index - 1, lsib_info);
+
+   return true; // 借项成功
+}
 }
