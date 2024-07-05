@@ -391,9 +391,9 @@ bool remove(struct iovec key){
     return true;
 }
 
-// key: 要删的key
 bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
-   if (track.empty()) return false; // 没有父节点则没有兄弟节点
+   // 没有父节点则没有兄弟节点
+   if (track.empty()) return false; 
 
    // 获取父节点
    unsigned int parent_id = track.top();
@@ -438,14 +438,28 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    left_sibling.deallocate(left_sibling.getSlots() - 1);
 
    // 更新父节点中的相关键值
-   // TODO: 上层更新
-   // Record first_record;
-   // current_node.refslots(0, first_record);
-   // unsigned char *new_key;
-   // unsigned int new_key_len;
-   // first_record.refByIndex(&new_key, &new_key_len, KEY_INDEX);
-   // parent_record.setByIndex((char *)new_key, new_key_len, KEY_INDEX);
-   // parent_node.writeBack(current_index - 1, lsib_info);
+
+   // 1. 获取待更新项的键
+   Record first_record;
+   current_node.refslots(0, first_record);
+   unsigned char *new_key;
+   unsigned int new_key_len;
+   first_record.getByIndex(&new_key, &new_key_len, KEY_INDEX);
+
+   // 2. 获取待更新项的值
+   unsigned int new_value = current_node.getSelf();
+   new_value = htobe32(new_value);
+
+   // 3. 删除父节点中旧项
+   parent_node.deallocate(current_index);
+
+   // 4. 父节点中添加新项
+   std::vector<struct iovec> new_kv(2);
+   new_kv[0].iov_base = (void*) new_key;
+   new_kv[0].iov_len = new_key_len;
+   new_kv[1].iov_base = (void *) &new_value;
+   new_kv[1].iov_len = sizeof(new_value);
+   parent_node.insertRecord(new_kv);
 
    return true; // 借项成功
 }
