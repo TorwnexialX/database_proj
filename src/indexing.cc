@@ -391,28 +391,33 @@ bool Bptree::remove(struct iovec key){
         if (cur_node.getSelf() == superblock.getRoot()) break;
 
         unsigned int left_right = 0;
-        unsigned int sib_id;
-        bool stop;
+        std::pair<bool, unsigned int> borrow_result;
+        bool &stop = borrow_result.first;
+        unsigned int& sib_id = borrow_result.second;
         // 借左兄弟的项
-        {stop, sib_id} = borrow_lsib(cur_node, key);
+        borrow_result = borrow_lsib(cur_node, key);
         if (stop) return true;
         // 借右兄弟的项
         left_right = 1;
-        {stop, sib_id} = borrow_rsib(cur_node, key);
+        borrow_result = borrow_rsib(cur_node, key);
         if (stop) return true;
         // 需要合并
         if (left_right == 0) {
             Node lsib;
-            unsigned int parent_id;
             attach_node(lsib, sib_id);
-            {key, parent_id} = merge(lsib, cur_node);
+            std::pair<struct iovec, unsigned int> merge_result;
+            merge_result = merge(lsib, cur_node);
+            key = merge_result.first;
+            unsigned int parent_id = merge_result.second;
             attach_node(cur_node, parent_id);
         }
         else if (left_right == 1) {
             Node rsib;
-            unsigned int parent_id;
             attach_node(rsib, sib_id);
-            {key, parent_id} = merge(cur_node, rsib);
+            std::pair<struct iovec, unsigned int> merge_result;
+            merge_result = merge(cur_node, rsib);
+            key = merge_result.first;
+            unsigned int parent_id = merge_result.second;
             attach_node(cur_node, parent_id);
         }
         track.pop();

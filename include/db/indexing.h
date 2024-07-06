@@ -91,10 +91,10 @@ namespace db {
         void clear_tree();
 
         // 从左兄弟借项，返回{是否成功，兄弟id}
-        std::pair<bool, unsigned int> borrow_lsib(struct iovec key);
+        std::pair<bool, unsigned int> borrow_lsib(Node& current_node, struct iovec key);
 
         // 从右兄弟借项，返回{是否成功，兄弟id}
-        std::pair<bool, unsigned int> borrow_rsib(struct iovec key);
+        std::pair<bool, unsigned int> borrow_rsib(Node& current_node, struct iovec key);
 
         // 合并，返回merge后父节点中删除的记录的key
         std::pair<struct iovec, unsigned int>
