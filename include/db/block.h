@@ -110,7 +110,6 @@ struct DataHeader : CommonHeader
     unsigned short slots;    // slots[]长度(2B)
     unsigned short freesize; // 空闲空间大小(2B)
     unsigned int self;       // 本块id(4B)
-    bool leaf;               // 该node是否是叶子节点
 };
 
 // 元数据块头部
@@ -354,7 +353,6 @@ class SuperBlock : public Block
        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
        header->root = htobe32(root);
     }
-
 };
 
 ////

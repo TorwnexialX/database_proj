@@ -18,15 +18,15 @@ namespace db {
     class Node : public DataBlock {
         public:
         // 判断当前节点是否是叶子节点
-        inline bool is_leaf() {
+        inline short is_leaf() {
             DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
-            return header->leaf;
+            return header->type;
         }
 
         // 设置当前节点是否为叶子节点
-        inline void set_leaf(bool leaf) {
+        inline void set_leaf(short leaf) {
             DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
-            header->leaf = leaf;
+            header->type = leaf;
         }
 
         // 获得当前节点的最左侧孩子域

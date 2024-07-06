@@ -20,11 +20,11 @@ TEST_CASE("db/indexing.cc"){
         Node node;
         node.attach(desp->buffer);
         // 设置为叶子节点
-        node.set_leaf(true);
-        REQUIRE(node.is_leaf() == true);
+        node.set_leaf(1);
+        REQUIRE(node.is_leaf() == 1);
         // 设置为非叶子节点
-        node.set_leaf(false);
-        REQUIRE(node.is_leaf() == false);
+        node.set_leaf(0);
+        REQUIRE(node.is_leaf() == 0);
         // 删除节点
         table.deallocate(node_id);
     }
