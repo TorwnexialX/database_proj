@@ -64,7 +64,6 @@ namespace db {
         void attach_node(Node &node, unsigned int node_id);
 
         // 在给定节点后连接一个新节点，并返回该新节点
-        // ATTENTION: 直接返回节点不确定是否会出现bug
         Node node_append(Node *node);
 
         // 获取根节点id
@@ -90,5 +89,15 @@ namespace db {
 
         // 清空树
         void clear_tree();
+
+        // 从左兄弟借项，返回{是否成功，兄弟id}
+        std::pair<bool, unsigned int> borrow_lsib(struct iovec key);
+
+        // 从右兄弟借项，返回{是否成功，兄弟id}
+        std::pair<bool, unsigned int> borrow_rsib(struct iovec key);
+
+        // 合并，返回merge后父节点中删除的记录的key
+        std::pair<struct iovec, unsigned int>
+        merge(Node &left_node, Node &right_node);
     };
 }

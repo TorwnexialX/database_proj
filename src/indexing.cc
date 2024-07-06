@@ -342,10 +342,10 @@ std::pair<bool, unsigned int> Bptree::get_root(){
    superblock.attach(desp->buffer);
    desp->relref();
 
-    // 当前树为空树
-    if (superblock.getDataCounts() == 0) return {false, 0};
-    // 当前树非空
-    else return {true, superblock.getRoot()};
+   // 当前树为空树
+   if (superblock.getDataCounts() == 0) return {false, 0};
+   // 当前树非空
+   else return {true, superblock.getRoot()};
 }
 
 void Bptree::attach_node(Node &node, unsigned int node_id){
@@ -353,6 +353,255 @@ void Bptree::attach_node(Node &node, unsigned int node_id){
     BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), node_id);
     node.attach(desp->buffer);
     node.setTable(table_);
+}
+
+bool Bptree::remove(struct iovec key){
+    // 读取超级块
+    SuperBlock superblock;
+    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+    superblock.attach(desp->buffer);
+    desp->relref();
+
+    // B+树为空树
+    if (superblock.getDataCounts() == 0) return false;
+
+    // B+树非空
+    Node leaf_node;
+    reset_track();
+    unsigned int leaf_id = find_leaf(key);
+    attach_node(leaf_node, leaf_id);
+    unsigned int lb_index = leaf_node.searchRecord(key.iov_base, key.iov_len);
+
+    // 如果要删除的记录项不存在
+    if (!leaf_node.same_key(key, lb_index)) return false;
+
+    // 要删除的项在该叶节点中，直接删除其中对应record
+    unsigned leaf_index = lb_index - 1; // TODO
+    leaf_node.deallocate(leaf_id);
+
+    // 当前叶节点即根节点，说明树只有一个节点，则删除工作到此结束
+    if (leaf_node.getSelf() == superblock.getRoot()) return true;
+
+   // 每个record中最小的项数
+   unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
+
+    Node cur_node = leaf_node;
+    while (cur_node.getSlots() < min_keys) {
+        // 到达根节点则不再向上迭代
+        if (cur_node.getSelf() == superblock.getRoot()) break;
+
+        unsigned int left_right = 0;
+        unsigned int sib_id;
+        bool stop;
+        // 借左兄弟的项
+        {stop, sib_id} = borrow_lsib(cur_node, key);
+        if (stop) return true;
+        // 借右兄弟的项
+        left_right = 1;
+        {stop, sib_id} = borrow_rsib(cur_node, key);
+        if (stop) return true;
+        // 需要合并
+        if (left_right == 0) {
+            Node lsib;
+            unsigned int parent_id;
+            attach_node(lsib, sib_id);
+            {key, parent_id} = merge(lsib, cur_node);
+            attach_node(cur_node, parent_id);
+        }
+        else if (left_right == 1) {
+            Node rsib;
+            unsigned int parent_id;
+            attach_node(rsib, sib_id);
+            {key, parent_id} = merge(cur_node, rsib);
+            attach_node(cur_node, parent_id);
+        }
+        track.pop();
+    }
+
+    return true;
+}
+
+std::pair<bool, unsigned int>
+Bptree::borrow_lsib(Node &current_node, struct iovec key) {
+   // 获取父节点
+   unsigned int parent_id = track.top();
+   Node parent_node;
+   attach_node(parent_node, parent_id);
+
+   // 查找当前节点在父节点中的索引
+   unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
+   bool if_same = parent_node.same_key(key, current_index);
+   current_index -= (if_same || current_index == 0) ? 0 : 1;
+   if (current_index == 0) return {false, 0}; // 没有左兄弟
+
+
+   // 获取左兄弟节点的id信息
+   Record lsib_info;
+   unsigned int lsib_info_idx = current_index - 1;
+   unsigned int lsib_id, lsib_id_len;
+   parent_node.refslots(lsib_info_idx, lsib_info);
+   lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
+   lsib_id = be32toh(lsib_id);
+
+   // 获取左兄弟
+   Node left_sibling;
+   attach_node(left_sibling, lsib_id);
+
+   // 检查左兄弟是否有足够的项可以借
+   SuperBlock superblock;
+   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+   superblock.attach(desp->buffer);
+   desp->relref();
+
+   // 兄弟项不够借
+   unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
+   if (left_sibling.getSlots() <= min_entries) return {false, lsib_id};
+
+   // 将左兄弟的最右侧项复制到当前节点
+   Record last_record;
+   left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
+   current_node.copyRecord(last_record);
+   left_sibling.deallocate(left_sibling.getSlots() - 1);
+
+   // 更新父节点中的相关键值
+
+   // 1. 获取待更新项的键
+   Record first_record;
+   current_node.refslots(0, first_record);
+   unsigned char *new_key;
+   unsigned int new_key_len;
+   first_record.getByIndex(&new_key, &new_key_len, KEY_INDEX);
+
+   // 2. 获取待更新项的值
+   unsigned int new_value = current_node.getSelf();
+   new_value = htobe32(new_value);
+
+   // 3. 删除父节点中旧项
+   parent_node.deallocate(current_index);
+
+   // 4. 父节点中添加新项
+   std::vector<struct iovec> new_kv(2);
+   new_kv[0].iov_base = (void*) new_key;
+   new_kv[0].iov_len = new_key_len;
+   new_kv[1].iov_base = (void *) &new_value;
+   new_kv[1].iov_len = sizeof(new_value);
+   parent_node.insertRecord(new_kv);
+
+   return {true, lsib_id}; // 借项成功
+}
+
+std::pair<bool, unsigned int>
+Bptree::borrow_rsib(Node &current_node, struct iovec key) {
+   // 获取父节点
+   unsigned int parent_id = track.top();
+   Node parent_node;
+   attach_node(parent_node, parent_id);
+
+   // 查找当前节点在父节点中的索引
+   unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
+   
+   // 对current_index进行修正(因为其最开始的index是lower_bound的)
+   bool if_same = parent_node.same_key(key, current_index);
+   unsigned int rsib_info_idx = 1;
+   if (current_index == 0 && !if_same) rsib_info_idx = 0; 
+   else current_index -= if_same ? 0 : 1;
+
+   // 没有右兄弟则失败
+   if (current_index == parent_node.getSlots() - 1) return {false, 0};
+
+   // 获取右兄弟的id信息
+   Record rsib_info;
+   rsib_info_idx = rsib_info_idx == 0 ? 0 : current_index + 1;
+   unsigned int rsib_id, rsib_id_len;
+   parent_node.refslots(rsib_info_idx, rsib_info);
+   lsib_info.getByIndex((char *)&rsib_id, &rsib_id_len, VALUE_INDEX);
+   rsib_id = be32toh(rsib_id);
+
+   // 获取右兄弟
+   Node right_sibling;
+   attach_node(right_sibling, rsib_id);
+
+   // 检查右兄弟是否有足够的项可以借
+   SuperBlock superblock;
+   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+   superblock.attach(desp->buffer);
+   desp->relref();
+
+   // 兄弟项不够借
+   unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
+   if (right_sibling.getSlots() <= min_entries) return {false, rsib_id};
+
+   // 将右兄弟的最左侧项复制到当前节点
+   Record first_record;
+   right_sibling.refslots(0, first_record);
+   current_node.copyRecord(first_record);
+   right_sibling.deallocate(0);
+
+   // 更新父节点中的相关键值
+
+   // 1. 获取待更新项的键
+   right_sibling.refslots(0, first_record);
+   unsigned char *new_key;
+   unsigned int new_key_len;
+   first_record.getByIndex(&new_key, &new_key_len, KEY_INDEX);
+
+   // 2. 获取待更新项的值
+   unsigned int new_value = right_sibling.getSelf();
+   new_value = htobe32(new_value);
+
+   // 3. 删除父节点中旧项
+   parent_node.deallocate(rsib_info_idx);
+
+   // 4. 父节点中添加新项
+   std::vector<struct iovec> new_kv(2);
+   new_kv[0].iov_base = (void*) new_key;
+   new_kv[0].iov_len = new_key_len;
+   new_kv[1].iov_base = (void *) &new_value;
+   new_kv[1].iov_len = sizeof(new_value);
+   parent_node.insertRecord(new_kv);
+
+   return {true, rsib_id}; // 借项成功
+}
+
+std::pair<struct iovec, unsigned int>
+Bptree::merge(Node &left_node, Node &right_node){
+    // 将右节点中的records都复制到左节点中
+    while(right_node.getSlots() > 0){
+        Record temp;
+        right_node.refslots(0, temp);
+        left_node.copyRecord(temp);
+        right_node.deallocate(0);
+    }
+
+    // 获取父节点
+    unsigned int parent_id = track.top();
+    Node parent_node;
+    attach_node(parent_node, parent_id);
+
+    // 获取右节点的首record键值
+    Record head_record;
+    right_node.refslots(0, head_record);
+    unsigned int head_key, head_key_len;
+    head_record.getByIndex((char *) &head_key, &head_key_len, KEY_INDEX);
+    struct iovec key;
+    key.iov_base = &head_key;
+    key.iov_len = head_key_len;
+
+    // 查找右节点在父节点中的索引
+    unsigned int right_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
+    bool if_same = parent_node.same_key(key, right_idx);
+    right_idx -= if_same ? 0 : 1;
+
+    // 获得rigt_record的key
+    Record right_record;
+    parent_node.refslots(right_idx, right_record);
+    right_record.getByIndex((char *) &key.iov_base, &key.iov_len, KEY_INDEX);
+
+    // 删去右节点在parent中对应的record，并删除右节点
+    parent_node.deallocate(right_idx);
+    table_->deallocate(right_node.getSelf());
+
+    return {key, parent_id};
 }
 
 }
