@@ -24,8 +24,8 @@ TEST_CASE("db/block.h")
         REQUIRE(sizeof(Trailer) % 8 == 0);
         REQUIRE(
             sizeof(SuperHeader) ==
-            sizeof(CommonHeader) + sizeof(TimeStamp) + 13 * sizeof(int)); 
-            // 由9改成了13，这是由是由B+树部分带来的属性扩充
+            sizeof(CommonHeader) + sizeof(TimeStamp) + 11 * sizeof(int)); 
+            // 由9改成了11，这是由是由B+树部分带来2个4int型的属性扩充
         REQUIRE(sizeof(SuperHeader) % 8 == 0);
         REQUIRE(sizeof(IdleHeader) == sizeof(CommonHeader) + sizeof(int));
         REQUIRE(sizeof(IdleHeader) % 8 == 0);
