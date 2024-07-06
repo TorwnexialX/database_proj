@@ -308,12 +308,12 @@ bool Bptree::remove(struct iovec key){
             {key, parent_id} = merge(cur_node, rsib);
             attach_node(cur_node, parent_id);
         }
+        track.pop();
     }
 
     return true;
 }
 
-// 没有pop，在remove中需要加pop动作
 std::pair<bool, unsigned int>
 Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    // 获取父节点
