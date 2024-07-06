@@ -436,14 +436,18 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    // 查找当前节点在父节点中的索引
    unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
    bool if_same = parent_node.same_key(key, current_index);
-   current_index -= (if_same || current_index == 0) ? 0 : 1;
-   if (current_index == 0) return {false, 0}; // 没有左兄弟
-
+   unsigned int lsib_id = 0;
+   // 若节点为同Parent的最左节点，则没有左兄弟
+   if (current_index == 0 && !if_same) return {false, 0};
+   // 若节点为同parent的第二左节点，则左兄弟在next中指出
+   if (current_index == 0 && if_same) lsib_id = parent_node.getNext();
+   // 其他情况下对current_index做lower_bound修正
+   else current_index -= if_same ? 0 : 1;
 
    // 获取左兄弟节点的id信息
    Record lsib_info;
    unsigned int lsib_info_idx = current_index - 1;
-   unsigned int lsib_id, lsib_id_len;
+   unsigned int lsib_id_len;
    parent_node.refslots(lsib_info_idx, lsib_info);
    lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
    lsib_id = be32toh(lsib_id);
