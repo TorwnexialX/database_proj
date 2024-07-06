@@ -109,6 +109,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
     reset_track();
 
     while(!cur_node.is_leaf()){
+        if (cur_node.getSlots() == 0) return 0; // 理论上不该出现
         track.push(cur_node.getSelf());
         // 'lb' stands for 'lowerbound'
         unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
@@ -138,10 +139,15 @@ unsigned int Bptree::find_leaf(struct iovec key){
 
 Node Bptree::node_append(Node *node){
     Node new_node;
+    bool is_leaf = node->is_leaf();
     unsigned int new_id = table_->allocate();
     attach_node(new_node, new_id);
-    new_node.setNext(node->getNext());
-    node->setNext(new_node.getSelf());
+    if (is_leaf) {
+        new_node.setNext(node->getNext());
+        node->setNext(new_node.getSelf());
+        new_node.set_leaf(true);
+    }
+    else new_node.setNext(0);
     return new_node;
 }
 
@@ -167,6 +173,8 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
     // 用于存储key-value对
     std::vector<struct iovec> iov(2);
+    iov[0] = key;
+    iov[1] = value;
 
     // B+树为空树
     if (superblock.getNodecounts() == 0) {
@@ -177,6 +185,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         attach_node(cur_node, newroot);
         cur_node.set_leaf(true);
         cur_node.insertRecord(iov);
+        superblock.setNodecounts(superblock.getNodecounts() + 1);
         return true;
     }
 
@@ -192,6 +201,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     if (former_node.same_key(key, lb_index)) return false;
 
     unsigned int node_id = leaf_id;
+    unsigned int new_value;
 
     // 每个循环内，对node_id所在node插入key-value
     while(!track.empty()){
@@ -208,8 +218,6 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         // 执行分裂操作
         // 1. 创建新node
         Node next_node = node_append(&cur_node);
-        // 如果当前节点为叶子结点，则next_node需要设置为叶子结点
-        if (cur_node.is_leaf() == true) next_node.set_leaf(true);
         // 2. 将cur_node数据分开，其中(order + 1) / 2条record放入next_node
         unsigned short mid_record = cur_node.getSlots() / 2;
         while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
@@ -230,9 +238,10 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         key.iov_len = sizeof(head_key);
 
         // 更新value
-        node_id = htobe32(node_id);
-        value.iov_base = &node_id;
-        value.iov_len = sizeof(node_id);
+        new_value = next_node.getSelf();
+        new_value= htobe32(new_value);
+        value.iov_base = &new_value;
+        value.iov_len = sizeof(new_value);
 
         // 更新 node_id
         node_id = track.top();
@@ -277,6 +286,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
     // 创建新的根节点
     unsigned int new_root_id = table_->allocate();
+    superblock.setRoot(new_root_id);
     Node new_root;
     attach_node(new_root, new_root_id);
 
