@@ -97,15 +97,15 @@ std::pair<bool, struct iovec> Bptree::search(struct iovec key) {
 }
 
 unsigned int Bptree::find_leaf(struct iovec key){
-    std::pair<bool, unsigned int> ret = get_root();
-    unsigned int root = ret.second;
-    Node cur_node;
-    attach_node(cur_node, root);
+   std::pair<bool, unsigned int> ret = get_root();
+   unsigned int root = ret.second;
+   Node cur_node;
+   attach_node(cur_node, root);
 
     unsigned int child = root;
     unsigned int child_len;
 
-    reset_track();
+   reset_track();
 
     while(!cur_node.is_leaf()){
         if (cur_node.getSlots() == 0) return 0; // 理论上不该出现
@@ -121,8 +121,8 @@ unsigned int Bptree::find_leaf(struct iovec key){
             attach_node(cur_node, child);
         }
 
-        // 如果给定的key与lb_key不同说明该key应在前面的record中
-        lb_index -= if_same ? 0 : 1;
+       // 如果给定的key与lb_key不同说明该key应在前面的record中
+       lb_index -= if_same ? 0 : 1;
 
         Record lb_record;
         int test_slots_num = cur_node.getSlots();
@@ -133,7 +133,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
         attach_node(cur_node, child);
     }
 
-    return child;
+   return child;
 }
 
 Node Bptree::node_append(Node *node){
@@ -151,16 +151,16 @@ Node Bptree::node_append(Node *node){
 }
 
 bool Node::same_key(struct iovec key, unsigned int index){
-    Record record;
-    if (index >= getSlots()) return false;
+   Record record;
+   if (index >= getSlots()) return false;
 
-    refslots(index, record);
-    unsigned char *pkey;
-    unsigned int len;
-    record.refByIndex(&pkey, &len, KEY_INDEX);
+   refslots(index, record);
+   unsigned char *pkey;
+   unsigned int len;
+   record.refByIndex(&pkey, &len, KEY_INDEX);
 
-    if (memcmp(pkey, key.iov_base, len) == 0) return true;
-    else return false;
+   if (memcmp(pkey, key.iov_base, len) == 0) return true;
+   else return false;
 }
 
 bool Bptree::insert(struct iovec key, struct iovec value){
@@ -232,7 +232,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             unsigned int new_left, new_left_len;
             next_node.refslots(0, redundant_head);
             redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
-
+            
             // 将该信息设置为next_node的next域
             new_left = be32toh(new_left);
             next_node.set_left(new_left);
@@ -240,7 +240,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             // 删除第一个冗余record
             next_node.deallocate(0);
         }
-
+        
         // 获取next_node的首record的key-value
         Record head_record;
         next_node.refslots(0, head_record); // 不确定ref还是copy
@@ -336,11 +336,11 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 }
 
 std::pair<bool, unsigned int> Bptree::get_root(){
-    //读取超级块
-    SuperBlock superblock;
-    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
-    superblock.attach(desp->buffer);
-    desp->relref();
+   //读取超级块
+   SuperBlock superblock;
+   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+   superblock.attach(desp->buffer);
+   desp->relref();
 
     // 当前树为空树
     if (superblock.getDataCounts() == 0) return {false, 0};

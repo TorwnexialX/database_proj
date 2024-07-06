@@ -84,8 +84,8 @@ struct SuperHeader : CommonHeader
     unsigned int first;      // 第1个数据块(4B)
     long long stamp;         // 时戳(8B)
     unsigned int idle;       // 空闲块(4B)
-    unsigned int datacounts; // 数据块个数
-    unsigned int idlecounts; // 空闲块个数
+    unsigned int datacounts; // 数据块个数(4B)
+    unsigned int idlecounts; // 空闲块个数(4B)
     unsigned int self;       // 本块id(4B)
     unsigned int maxid;      // 最大的blockid(4B)
     unsigned int pad;        // 填充位(4B)
@@ -346,14 +346,14 @@ class SuperBlock : public Block
     // 获得根节点
     inline unsigned int getRoot()
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        return be32toh(header->root);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       return be32toh(header->root);
     }
     // 设定根节点
     inline void setRoot(unsigned int root)
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        header->root = htobe32(root);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       header->root = htobe32(root);
     }
 
 };
