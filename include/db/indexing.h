@@ -94,7 +94,6 @@ namespace db {
         // 从右兄弟借项
         bool borrow_rsib(struct iovec key);
 
-        // 上层树更新（从当前栈顶开始）（next域不会涉及到更新）
-        bool tree_update();
+        // 合并
     };
 }

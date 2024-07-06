@@ -102,7 +102,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
    std::vector<struct iovec> iov(2);
 
    // B+树为空树
-   if (superblock.getNodecounts() == 0) {
+   if (superblock.getDataCounts() == 0) {
        unsigned int newroot = table_->allocate();
        superblock.setRoot(newroot);
        Node cur_node;
@@ -237,7 +237,7 @@ std::pair<bool, unsigned int> Bptree::get_root(){
    desp->relref();
 
    // 当前树为空树
-   if (superblock.getNodecounts() == 0) return {false, 0};
+   if (superblock.getDataCounts() == 0) return {false, 0};
    // 当前树非空
    else return {true, superblock.getRoot()};
 }
@@ -256,7 +256,7 @@ bool remove(struct iovec key){
    desp->relref();
 
    // B+树为空树
-   if (superblock.getNodecounts() == 0) return false;
+   if (superblock.getDataCounts() == 0) return false;
 
    // B+树非空
    Node leaf_node;
@@ -283,7 +283,7 @@ bool remove(struct iovec key){
          // 根节点为空，说明树目前只有一个空的根节点，故将该树设置为空树
          if (leaf_node.getSlots() == 0) {
             superblock.setRoot(0);
-            superblock.setNodecounts(0);
+            superblock.getDataCounts(0);
          }
          return true;
       }
@@ -395,9 +395,6 @@ bool remove(struct iovec key){
 
 // 没有pop，在remove中需要加pop动作
 bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
-   // 没有父节点则没有兄弟节点
-   if (track.empty()) return false; 
-
    // 获取父节点
    unsigned int parent_id = track.top();
    Node parent_node;
@@ -405,7 +402,6 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 
    // 查找当前节点在父节点中的索引
    unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
-   
    bool if_same = parent_node.same_key(key, current_index);
    current_index -= (if_same || current_index == 0) ? 0 : 1;
    if (current_index == 0) return false; // 没有左兄弟
@@ -467,9 +463,6 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 }
 
 bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
-   // 没有父节点则没有兄弟节点
-   if (track.empty()) return false; 
-
    // 获取父节点
    unsigned int parent_id = track.top();
    Node parent_node;
@@ -541,4 +534,5 @@ bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    return true; // 借项成功
 }
 
+bool Bptree::merge()
 }

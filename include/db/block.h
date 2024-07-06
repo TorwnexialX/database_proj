@@ -93,7 +93,6 @@ struct SuperHeader : CommonHeader
     // 聚集索引相关
     unsigned int order;      // B+树阶数
     unsigned int root;       // B+树根节点
-    unsigned int nodecounts; // B+树节点个数
     // hight
 };
 
