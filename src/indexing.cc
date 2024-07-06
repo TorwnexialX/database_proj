@@ -249,34 +249,40 @@ void Bptree::attach_node(Node &node, unsigned int node_id){
 }
 
 bool remove(struct iovec key){
-   // 读取超级块
-   SuperBlock superblock;
-   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
-   superblock.attach(desp->buffer);
-   desp->relref();
+    // 读取超级块
+    SuperBlock superblock;
+    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+    superblock.attach(desp->buffer);
+    desp->relref();
 
-   // B+树为空树
-   if (superblock.getDataCounts() == 0) return false;
+    // B+树为空树
+    if (superblock.getDataCounts() == 0) return false;
 
-   // B+树非空
-   Node leaf_node;
-   reset_track();
-   unsigned int leaf_id = find_leaf(key);
-   attach_node(leaf_node, leaf_id);
-   unsigned int lb_index = leaf_node.searchRecord(key.iov_base, key.iov_len);
+    // B+树非空
+    Node leaf_node;
+    reset_track();
+    unsigned int leaf_id = find_leaf(key);
+    attach_node(leaf_node, leaf_id);
+    unsigned int lb_index = leaf_node.searchRecord(key.iov_base, key.iov_len);
 
-   // 如果要删除的记录项不存在
-   if (!former_node.same_key(key, lb_index)) return false;
+    // 如果要删除的记录项不存在
+    if (!leaf_node.same_key(key, lb_index)) return false;
 
-   // 要删除的项在该叶节点中，直接删除其中对应record
-   leaf_node.deallocate(leaf_id);
+    // 要删除的项在该叶节点中，直接删除其中对应record
+    unsigned leaf_index = lb_index - 1; // TODO
+    leaf_node.deallocate(leaf_id);
 
-   if (leaf_node.getSelf() == superblock.getRoot()) return true;
-
-
+    // 当前叶节点即根节点，说明树只有一个节点，则删除工作到此结束
+    if (leaf_node.getSelf() == superblock.getRoot()) return true;
 
    // 每个record中最小的项数
    unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
+
+    if (leaf_node.getSlots() < min_keys) {
+
+    }
+
+    return true;
 
    // 对于当前项数小于最小值时
    while (leaf_node.getSlots() < min_keys) {
@@ -538,7 +544,7 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    return {true, rsib_id}; // 借项成功
 }
 
-bool Bptree::merge(Node &left_node, Node &right_node){
+struct iovec Bptree::merge(Node &left_node, Node &right_node){
     // 将右节点中的records都复制到左节点中
     while(right_node.getSlots() > 0){
         Record temp;
@@ -566,8 +572,16 @@ bool Bptree::merge(Node &left_node, Node &right_node){
     bool if_same = parent_node.same_key(key, right_idx);
     right_idx -= if_same ? 0 : 1;
 
+    // 获得rigt_record的key
+    Record right_record;
+    parent_node.refslots(right_idx, right_record);
+    right_record.getByIndex((char *) &key.iov_base, &key.iov_len, KEY_INDEX);
+
     // 删去右节点在parent中对应的record，并删除右节点
     parent_node.deallocate(right_idx);
     table_->deallocate(right_node.getSelf());
+
+    return key;
 }
+
 }

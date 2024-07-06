@@ -94,7 +94,7 @@ namespace db {
         // 从右兄弟借项，返回{是否成功，兄弟id}
         std::pair<bool, unsigned int> borrow_rsib(struct iovec key);
 
-        // 合并
-        bool Bptree::merge(Node &left_node, Node &right_node);
+        // 合并，返回merge后父节点中删除的记录的key
+        struct iovec Bptree::merge(Node &left_node, Node &right_node);
     };
 }
