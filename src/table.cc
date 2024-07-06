@@ -137,6 +137,8 @@ unsigned int Table::allocate()
     desp = kBuffer.borrow(name_.c_str(), maxid_);
     data.attach(desp->buffer);
     data.clear(1, maxid_, BLOCK_TYPE_DATA);
+    DataHeader *header = reinterpret_cast<DataHeader *>(desp->buffer);
+    header->type = 0;
     desp->relref();
 
     return maxid_;
