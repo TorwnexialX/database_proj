@@ -226,6 +226,22 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             next_node.copyRecord(record);
             cur_node.deallocate(mid_record);
         }
+
+        // 对于非叶子节点，要删除next_node的第一个冗余record
+        if (!cur_node.is_leaf()){
+            // 将第一个冗余record中的value信息提取出来
+            Record redundant_head;
+            unsigned int new_left, new_left_len;
+            next_node.refslots(0, redundant_head);
+            redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
+            
+            // 将该信息设置为next_node的next域
+            new_left = be32toh(new_left);
+            next_node.set_left(new_left);
+
+            // 删除第一个冗余record
+            next_node.deallocate(0);
+        }
         
         // 获取next_node的首record的key-value
         Record head_record;
