@@ -445,12 +445,15 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    else current_index -= if_same ? 0 : 1;
 
    // 获取左兄弟节点的id信息
-   Record lsib_info;
-   unsigned int lsib_info_idx = current_index - 1;
-   unsigned int lsib_id_len;
-   parent_node.refslots(lsib_info_idx, lsib_info);
-   lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
-   lsib_id = be32toh(lsib_id);
+    if (lsib_id == 0){
+        Record lsib_info;
+        unsigned int lsib_info_idx = current_index - 1;
+        unsigned int lsib_id_len;
+        parent_node.refslots(lsib_info_idx, lsib_info);
+        lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
+        lsib_id = be32toh(lsib_id);
+    }
+   
 
    // 获取左兄弟
    Node left_sibling;
