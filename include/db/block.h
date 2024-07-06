@@ -84,8 +84,8 @@ struct SuperHeader : CommonHeader
     unsigned int first;      // 第1个数据块(4B)
     long long stamp;         // 时戳(8B)
     unsigned int idle;       // 空闲块(4B)
-    unsigned int datacounts; // 数据块个数
-    unsigned int idlecounts; // 空闲块个数
+    unsigned int datacounts; // 数据块个数(4B)
+    unsigned int idlecounts; // 空闲块个数(4B)
     unsigned int self;       // 本块id(4B)
     unsigned int maxid;      // 最大的blockid(4B)
     unsigned int pad;        // 填充位(4B)
@@ -93,7 +93,6 @@ struct SuperHeader : CommonHeader
     // 聚集索引相关
     unsigned int order;      // B+树阶数
     unsigned int root;       // B+树根节点
-    unsigned int nodecounts; // B+树节点个数
     // hight
 };
 
@@ -346,41 +345,41 @@ class SuperBlock : public Block
     // 获得根节点
     inline unsigned int getRoot()
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        return be32toh(header->root);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       return be32toh(header->root);
     }
     // 设定根节点
     inline void setRoot(unsigned int root)
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        header->root = htobe32(root);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       header->root = htobe32(root);
     }
 
     // 获得节点数
     inline unsigned int getNodecounts()
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        return be32toh(header->nodecounts);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       return be32toh(header->nodecounts);
     }
     // 设定节点数
     inline void setNodecounts(unsigned int num_nodes)
     {
-        SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-        header->nodecounts = htobe32(num_nodes);
+       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
+       header->nodecounts = htobe32(num_nodes);
     }
     // 自增节点数
     inline void addNodecounts()
     {
-        unsigned int num_nodes = getNodecounts();
-        num_nodes++;
-        setNodecounts(num_nodes);
+       unsigned int num_nodes = getNodecounts();
+       num_nodes++;
+       setNodecounts(num_nodes);
     }
     // 自减节点数
     inline void relNodecounts()
     {
-        unsigned int num_nodes = getNodecounts();
-        num_nodes--;
-        setNodecounts(num_nodes);
+       unsigned int num_nodes = getNodecounts();
+       num_nodes--;
+       setNodecounts(num_nodes);
     }
 };
 
