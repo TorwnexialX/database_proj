@@ -94,7 +94,6 @@ TEST_CASE("db/indexing.cc"){
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
         super.setRoot(root_id);
-        super.setNodecounts(1);
         REQUIRE(super.getRoot() == root_id);
         // 读根节点
         Node root_node;
@@ -104,7 +103,6 @@ TEST_CASE("db/indexing.cc"){
         int key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
-        super.setNodecounts(2);
         std::vector<struct iovec> iov(2);
         key = htobe32(key);
         mid_child = htobe32(mid_child);
@@ -120,7 +118,6 @@ TEST_CASE("db/indexing.cc"){
         key = 20;
         unsigned int right_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 3);
-        super.setNodecounts(3);
         key = htobe32(key);
         right_child = htobe32(right_child);
         iov[0].iov_base = &key;
@@ -134,7 +131,6 @@ TEST_CASE("db/indexing.cc"){
         //                     10               20
         //       left_child(5)      mid_child(3)     right_child(4)
         unsigned int left_child = table_two.allocate();
-        super.setNodecounts(4);
         root_node.setNext(left_child);
 
         // 分别将left_child,mid_child,right_child设置为叶子节点
@@ -147,7 +143,6 @@ TEST_CASE("db/indexing.cc"){
         // 测试清空树的功能
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getNodecounts() == 0);
         REQUIRE(super.getRoot() == 0);
     }
 
@@ -171,7 +166,6 @@ TEST_CASE("db/indexing.cc"){
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
         super.setRoot(root_id);
-        super.setNodecounts(1);
         // 读根节点，根节点设置为叶子节点
         Node root_node;
         root_node.setTable(&table_two);
@@ -184,7 +178,6 @@ TEST_CASE("db/indexing.cc"){
         //清空手动建的树
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getNodecounts() == 0);
         REQUIRE(super.getRoot() == 0);
     }
 
@@ -215,7 +208,6 @@ TEST_CASE("db/indexing.cc"){
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
         super.setRoot(root_id);
-        super.setNodecounts(1);
         // 读根节点，根节点设置为叶子节点
         Node root_node;
         root_node.setTable(&table_two);
@@ -228,7 +220,6 @@ TEST_CASE("db/indexing.cc"){
         int key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
-        super.setNodecounts(2);
         std::vector<struct iovec> iov(2);
         key = htobe32(key);
         mid_child = htobe32(mid_child);
@@ -244,7 +235,6 @@ TEST_CASE("db/indexing.cc"){
         key = 20;
         unsigned int right_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 3);
-        super.setNodecounts(3);
         key = htobe32(key);
         right_child = htobe32(right_child);
         iov[0].iov_base = &key;
@@ -266,7 +256,6 @@ TEST_CASE("db/indexing.cc"){
         //                     10               20
         //       left_child(5)      mid_child(3)     right_child(4)
         unsigned int left_child = table_two.allocate();
-        super.setNodecounts(4);
         root_node.setNext(left_child);
         // 搜索左边，先将left_child设置为叶子节点
         tree.attach_node(root_node, left_child);
@@ -332,7 +321,6 @@ TEST_CASE("db/indexing.cc"){
 
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getNodecounts() == 0);
         REQUIRE(super.getRoot() == 0);
     }
 
@@ -351,13 +339,12 @@ TEST_CASE("db/indexing.cc"){
          super.attach(desp->buffer);
          desp->relref();
 
-         REQUIRE(super.getNodecounts() == 0);
+         REQUIRE(table_two.dataCount() == 0);
 
         // 构建一个根节点
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
         super.setRoot(root_id);
-        super.setNodecounts(1);
         // 读根节点
         Node root_node;
         root_node.setTable(&table_two);
@@ -369,7 +356,6 @@ TEST_CASE("db/indexing.cc"){
         int key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
-        super.setNodecounts(2);
         std::vector<struct iovec> iov(2);
         key = htobe32(key);
         mid_child = htobe32(mid_child);
@@ -385,7 +371,6 @@ TEST_CASE("db/indexing.cc"){
         key = 20;
         unsigned int right_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 3);
-        super.setNodecounts(3);
         key = htobe32(key);
         right_child = htobe32(right_child);
         iov[0].iov_base = &key;
@@ -399,7 +384,6 @@ TEST_CASE("db/indexing.cc"){
         //                     10               20
         //       left_child(5)      mid_child(3)     right_child(4)
         unsigned int left_child = table_two.allocate();
-        super.setNodecounts(4);
         root_node.setNext(left_child);
         // 将left_child设置为叶子节点，并插入数据
         Node left_node;
@@ -563,7 +547,6 @@ TEST_CASE("db/indexing.cc"){
         //清空手动建的树
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getNodecounts() == 0);
         REQUIRE(super.getRoot() == 0);
     }
 
@@ -763,8 +746,8 @@ TEST_CASE("db/indexing.cc"){
         // 插入第十个数据，节点分裂（注意：此处两个节点连续分裂）
         // 数据的形状：          30          50          70
         //                10 20      30 40      50  60      70  80  90
-        key = 90;
-        value = 90;
+        key = 100;
+        value = 100;
         key = htobe32(key);
         value = htobe32(value);
         iov[0].iov_base = &key;
@@ -778,35 +761,41 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
 
-        //// 测试顶层Search功能
-        //struct iovec unique_key;
-        //key = 50;
-        //key = htobe32(key);
-        //unique_key.iov_base = &key;
-        //unique_key.iov_len = sizeof(int);
-        //search_result = tree.search(insert_data[0]);
-        //REQUIRE(search_result.second.iov_base == &unique_value);
-        //system("pause");
-        //
-        //// 清空树
-        //tree.clear_tree();
-        //super.setRoot(0);
-        //// 设置树的阶数
-        //// ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
-        //super.setOrder(200);
+        // 测试顶层Search功能
+        struct iovec unique_key;
+        key = 50;
+        key = htobe32(key);
+        unique_key.iov_base = &key;
+        unique_key.iov_len = sizeof(int);
+        search_result = tree.search(unique_key);
+        REQUIRE(search_result.first == true);
+        REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
+        
+        // 清空树
+        tree.clear_tree();
+        super.setRoot(0);
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getRoot() == 0);
+        // 设置树的阶数
+        // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
+        super.setOrder(200);
 
-        ////连续插入数据
-        ////在我们的测试中对于500阶的索引树，datablock_num可达到4000000
-        //int success_num = 0;
-        //// ATTENTION:老师代码中插入数据数选择了1000
-        //int node_num = 1000;
-        //for (int i = 0; i < node_num; ++i){
-        //    key = htobe32(i);
-        //    insert_data= insert_preparation(key, value);
-        //    success_insert = tree.insert(insert_data[0], insert_data[1]);
-        //    if (success_insert == true) success_num++;
-        //}
-        //REQUIRE(super.getRoot() != 0);
+        //连续插入数据
+        //在我们的测试中对于500阶的索引树，datablock_num可达到4000000
+        int success_num = 0;
+        // ATTENTION:老师代码中插入数据数选择了1000
+        int node_num = 1000;
+        for (int i = 0; i < node_num; ++i){
+            key = htobe32(i);
+            value = htobe32(i << 2);
+            iov[0].iov_base = &key;
+            iov[0].iov_len = sizeof(key);
+            iov[1].iov_base = &value;
+            iov[1].iov_len = sizeof(int);
+            success_insert = tree.insert(iov[0], iov[1]);
+            if (success_insert == true) success_num++;
+        }
+        REQUIRE(super.getRoot() != 0);
     }
 
     // SECTION("Bptree::remove");

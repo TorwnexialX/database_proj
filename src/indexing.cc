@@ -12,7 +12,7 @@ void Bptree::clear_tree()
     superblock.attach(desp->buffer);
     desp->relref();
 
-    if (superblock.getNodecounts() == 0) return;
+    if (table_->dataCount() == 0) return;
 
     unsigned int root_id = superblock.getRoot();
 
@@ -60,7 +60,6 @@ void Bptree::clear_tree()
     while(!record_nodes.empty()){
         table_->deallocate(record_nodes.front());
         record_nodes.pop();
-        superblock.setNodecounts(superblock.getNodecounts() - 1);
     }
     superblock.setRoot(0);
 }
@@ -165,11 +164,11 @@ bool Node::same_key(struct iovec key, unsigned int index){
 }
 
 bool Bptree::insert(struct iovec key, struct iovec value){
-    // 读取超级块
-    SuperBlock superblock;
-    BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
-    superblock.attach(desp->buffer);
-    desp->relref();
+   // 读取超级块
+   SuperBlock superblock;
+   BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
+   superblock.attach(desp->buffer);
+   desp->relref();
 
     // 用于存储key-value对
     std::vector<struct iovec> iov(2);
@@ -177,7 +176,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     iov[1] = value;
 
     // B+树为空树
-    if (superblock.getNodecounts() == 0) {
+    if (superblock.getDataCounts() == 0) {
         unsigned int newroot = table_->allocate();
         superblock.setRoot(newroot);
         Node cur_node;
@@ -185,35 +184,34 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         attach_node(cur_node, newroot);
         cur_node.set_leaf(true);
         cur_node.insertRecord(iov);
-        superblock.setNodecounts(superblock.getNodecounts() + 1);
         return true;
     }
 
-    // B+树非空
-    // 需要栈，插入数据需要不断回溯查看是否存在需要分块的情况
-    Node former_node;
-    reset_track();
-    unsigned int leaf_id = find_leaf(key);
-    attach_node(former_node, leaf_id);
-    unsigned int lb_index = former_node.searchRecord(key.iov_base, key.iov_len);
+   // B+树非空
+   // 需要栈，插入数据需要不断回溯查看是否存在需要分块的情况
+   Node former_node;
+   reset_track();
+   unsigned int leaf_id = find_leaf(key);
+   attach_node(former_node, leaf_id);
+   unsigned int lb_index = former_node.searchRecord(key.iov_base, key.iov_len);
 
-    // 如果要插入的记录项已存在
-    if (former_node.same_key(key, lb_index)) return false;
+   // 如果要插入的记录项已存在
+   if (former_node.same_key(key, lb_index)) return false;
 
     unsigned int node_id = leaf_id;
     unsigned int new_value;
 
-    // 每个循环内，对node_id所在node插入key-value
-    while(!track.empty()){
-        // 插入k-v对
-        Node cur_node;
-        attach_node(cur_node, node_id);
-        iov[0] = key;
-        iov[1] = value;
-        cur_node.insertRecord(iov);
+   // 每个循环内，对node_id所在node插入key-value
+   while(!track.empty()){
+       // 插入k-v对
+       Node cur_node;
+       attach_node(cur_node, node_id);
+       iov[0] = key;
+       iov[1] = value;
+       cur_node.insertRecord(iov);
 
-        // 判断是否分裂
-        if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
+       // 判断是否分裂
+       if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
 
         // 执行分裂操作
         // 1. 创建新node
@@ -226,16 +224,32 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             next_node.copyRecord(record);
             cur_node.deallocate(mid_record);
         }
-        
+
+        // 对于非叶子节点，要删除next_node的第一个冗余record
+        if (!cur_node.is_leaf()){
+            // 将第一个冗余record中的value信息提取出来
+            Record redundant_head;
+            unsigned int new_left, new_left_len;
+            next_node.refslots(0, redundant_head);
+            redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
+
+            // 将该信息设置为next_node的next域
+            new_left = be32toh(new_left);
+            next_node.set_left(new_left);
+
+            // 删除第一个冗余record
+            next_node.deallocate(0);
+        }
+
         // 获取next_node的首record的key-value
         Record head_record;
         next_node.refslots(0, head_record); // 不确定ref还是copy
         unsigned int head_key, key_len;
         head_record.getByIndex((char *)&head_key, &key_len, 0);
 
-        // 更新key
-        key.iov_base = &head_key;
-        key.iov_len = sizeof(head_key);
+       // 更新key
+       key.iov_base = &head_key;
+       key.iov_len = sizeof(head_key);
 
         // 更新value
         new_value = next_node.getSelf();
@@ -243,46 +257,61 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         value.iov_base = &new_value;
         value.iov_len = sizeof(new_value);
 
-        // 更新 node_id
-        node_id = track.top();
-        track.pop();
-    }
+       // 更新 node_id
+       node_id = track.top();
+       track.pop();
+   }
 
-    // 根节点分裂（此时, node_id == super.get_root()）
+   // 根节点分裂（此时, node_id == super.get_root()）
 
-    // 插入k-v对
-    Node cur_node;
-    unsigned int cur_node_id = node_id;
-    attach_node(cur_node, cur_node_id);
-    iov[0] = key;
-    iov[1] = value;
-    cur_node.insertRecord(iov);
+   // 插入k-v对
+   Node cur_node;
+   unsigned int cur_node_id = node_id;
+   attach_node(cur_node, cur_node_id);
+   iov[0] = key;
+   iov[1] = value;
+   cur_node.insertRecord(iov);
 
-    // 判断是否分裂
-    if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
+   // 判断是否分裂
+   if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
 
-    // 执行分裂操作
-    // 1. 创建新node
-    Node next_node = node_append(&cur_node);
-    // 2. 将cur_node数据分开，一部分放入next_node
-    // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
-    unsigned short mid_record = cur_node.getSlots() / 2;
-    while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
-        Record record;
-        cur_node.refslots(mid_record, record);
-        next_node.copyRecord(record);
-        cur_node.deallocate(mid_record);
-    }
+   // 执行分裂操作
+   // 1. 创建新node
+   Node next_node = node_append(&cur_node);
+   // 2. 将cur_node数据分开，一部分放入next_node
+   // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
+   unsigned short mid_record = cur_node.getSlots() / 2;
+   while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
+       Record record;
+       cur_node.refslots(mid_record, record);
+       next_node.copyRecord(record);
+       cur_node.deallocate(mid_record);
+   }
 
-    // 获取next_node的首record的key-value
-    Record head_record;
-    next_node.refslots(0, head_record); // 不确定ref还是copy
-    unsigned int head_key, key_len;
-    head_record.getByIndex((char *)&head_key, &key_len, 0);
+   if (!cur_node.is_leaf()) {
+       // 将第一个冗余record中的value信息提取出来
+       Record redundant_head;
+       unsigned int new_left, new_left_len;
+       next_node.refslots(0, redundant_head);
+       redundant_head.getByIndex((char*)&new_left, &new_left_len, VALUE_INDEX);
 
-    // 获取next_node的id
-    unsigned int next_node_id = next_node.getSelf();
-    next_node_id = htobe32(next_node_id);
+       // 将该信息设置为next_node的next域
+       new_left = be32toh(new_left);
+       next_node.set_left(new_left);
+
+       // 删除第一个冗余record
+       next_node.deallocate(0);
+   }
+
+   // 获取next_node的首record的key-value
+   Record head_record;
+   next_node.refslots(0, head_record); // 不确定ref还是copy
+   unsigned int head_key, key_len;
+   head_record.getByIndex((char *)&head_key, &key_len, 0);
+
+   // 获取next_node的id
+   unsigned int next_node_id = next_node.getSelf();
+   next_node_id = htobe32(next_node_id);
 
     // 创建新的根节点
     unsigned int new_root_id = table_->allocate();
@@ -290,20 +319,20 @@ bool Bptree::insert(struct iovec key, struct iovec value){
     Node new_root;
     attach_node(new_root, new_root_id);
 
-    // 在新的根节点中加入新的record
-    iov[0].iov_base = &head_key;
-    iov[0].iov_len = sizeof(head_key);
-    iov[1].iov_base = &next_node_id;
-    iov[1].iov_len = sizeof(next_node_id);
-    new_root.insertRecord(iov);
+   // 在新的根节点中加入新的record
+   iov[0].iov_base = &head_key;
+   iov[0].iov_len = sizeof(head_key);
+   iov[1].iov_base = &next_node_id;
+   iov[1].iov_len = sizeof(next_node_id);
+   new_root.insertRecord(iov);
 
-    // 更新根节点的左孩子域
-    unsigned int left_child_id = cur_node.getSelf();
-    new_root.setNext(left_child_id);
+   // 更新根节点的左孩子域
+   unsigned int left_child_id = cur_node.getSelf();
+   new_root.setNext(left_child_id);
 
-    reset_track();
+   reset_track();
 
-    return true;
+   return true;
 }
 
 std::pair<bool, unsigned int> Bptree::get_root(){
@@ -314,7 +343,7 @@ std::pair<bool, unsigned int> Bptree::get_root(){
     desp->relref();
 
     // 当前树为空树
-    if (superblock.getNodecounts() == 0) return {false, 0};
+    if (superblock.getDataCounts() == 0) return {false, 0};
     // 当前树非空
     else return {true, superblock.getRoot()};
 }
