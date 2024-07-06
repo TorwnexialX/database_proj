@@ -117,6 +117,8 @@ unsigned int Table::allocate()
         desp = kBuffer.borrow(name_.c_str(), current);
         data.attach(desp->buffer);
         data.clear(1, current, BLOCK_TYPE_DATA);
+        DataHeader* header = reinterpret_cast<DataHeader*>(desp->buffer);
+        header->type = 0;
         desp->relref();
 
         return current;
