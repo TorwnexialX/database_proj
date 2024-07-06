@@ -138,13 +138,13 @@ unsigned int Bptree::find_leaf(struct iovec key){
 
 Node Bptree::node_append(Node *node){
     Node new_node;
-    bool is_leaf = node->is_leaf();
+    short is_leaf = node->is_leaf();
     unsigned int new_id = table_->allocate();
     attach_node(new_node, new_id);
     if (is_leaf) {
         new_node.setNext(node->getNext());
         node->setNext(new_node.getSelf());
-        new_node.set_leaf(true);
+        new_node.set_leaf(1);
     }
     else new_node.setNext(0);
     return new_node;
@@ -182,7 +182,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         Node cur_node;
         cur_node.setTable(table_);
         attach_node(cur_node, newroot);
-        cur_node.set_leaf(true);
+        cur_node.set_leaf(1);
         cur_node.insertRecord(iov);
         return true;
     }
