@@ -355,32 +355,6 @@ class SuperBlock : public Block
        header->root = htobe32(root);
     }
 
-    // 获得节点数
-    inline unsigned int getNodecounts()
-    {
-       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-       return be32toh(header->nodecounts);
-    }
-    // 设定节点数
-    inline void setNodecounts(unsigned int num_nodes)
-    {
-       SuperHeader *header = reinterpret_cast<SuperHeader *>(buffer_);
-       header->nodecounts = htobe32(num_nodes);
-    }
-    // 自增节点数
-    inline void addNodecounts()
-    {
-       unsigned int num_nodes = getNodecounts();
-       num_nodes++;
-       setNodecounts(num_nodes);
-    }
-    // 自减节点数
-    inline void relNodecounts()
-    {
-       unsigned int num_nodes = getNodecounts();
-       num_nodes--;
-       setNodecounts(num_nodes);
-    }
 };
 
 ////

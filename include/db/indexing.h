@@ -87,6 +87,9 @@ namespace db {
         // 根据给定key在bptree上删除，返回是否成功
         bool remove(struct iovec key);
 
+        // 清空树
+        void clear_tree();
+
         // 从左兄弟借项，返回{是否成功，兄弟id}
         std::pair<bool, unsigned int> borrow_lsib(struct iovec key);
 
