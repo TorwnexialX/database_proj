@@ -743,9 +743,10 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
 
-        // 插入第十个数据，节点分裂（注意：此处两个节点连续分裂）
-        // 数据的形状：          30          50          70
-        //                10 20      30 40      50  60      70  80  90
+        // 插入第十个数据，节点分裂(注意：此处两个节点连续分裂)
+        // 数据的形状：                        70
+        //                      30       50                  90
+        //                10  20   30  40   50  60    70  80     90  100
         key = 100;
         value = 100;
         key = htobe32(key);
@@ -796,7 +797,203 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         REQUIRE(super.getRoot() != 0);
+        // 清空树
+        tree.clear_tree();
+        super.setRoot(0);
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getRoot() == 0);
     }
 
-    // SECTION("Bptree::remove");
+    SECTION("Bptree::remove")
+    {
+        //打开表
+        Table table_two;
+        table_two.open("table_two");
+        Bptree tree;
+        tree.set_table(&table_two, 0, 1);
+        // 读超级块
+        SuperBlock super;
+        BufDesp* desp = kBuffer.borrow(table_two.name_.c_str(), 0);
+        super.attach(desp->buffer);
+        desp->relref();
+        // 空树搜索
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getRoot() == 0);
+        // 插入数据构造
+        // 具体的remove测试从932行开始
+        super.setOrder(5);
+        // 插入数据
+        int key = 10;
+        int value = 10;
+        std::vector<struct iovec> iov(2);
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        bool success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 20;
+        value = 20;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 30;
+        value = 30;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 40;
+        value = 40;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 50;
+        value = 50;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 60;
+        value = 60;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 70;
+        value = 70;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 80;
+        value = 80;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 90;
+        value = 90;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        key = 100;
+        value = 100;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        key = 110;
+        value = 110;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        // 数据的形状：                            70
+        //                      30       50                  90
+        //                10  20   30  40   50  60    70  80     90  100  110
+        // 开始remove的测试
+        // 第一种情况：要删除的数据不在Bptree中
+        key = 120;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        bool remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == false);
+        // 第二种情况：要删除的数据所在node数据量足够，可以直接删
+        key = 110;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        std::pair<bool, iovec> search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
+        // 将110插入回去
+        key = 110;
+        value = 110;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        // 第三种情况：要删除的数据所在node数据量不足够，向右兄弟借
+        // 数据的形状变为：                         70
+        //                      30       50                  100
+        //                10  20   30  40   50  60    70  90     100  110
+        key = 80;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
+
+        // 改变数据形状
+        key = 75;
+        value = 75;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        // 数据的形状：                            70
+        //                      30       50                  90
+        //                10  20   30  40   50  60    70  75  80     90  100
+
+    }
+
 }
