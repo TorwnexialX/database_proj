@@ -211,7 +211,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
        cur_node.insertRecord(iov);
 
        // 判断是否分裂
-       if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
+       if (cur_node.getSlots() <= superblock.getOrder() - 1) return true;
 
         // 执行分裂操作
         // 1. 创建新node
@@ -273,7 +273,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
    cur_node.insertRecord(iov);
 
    // 判断是否分裂
-   if (cur_node.getSlots() < superblock.getOrder() - 1) return true;
+   if (cur_node.getSlots() <= superblock.getOrder() - 1) return true;
 
    // 执行分裂操作
    // 1. 创建新node
@@ -383,7 +383,7 @@ bool Bptree::remove(struct iovec key){
     if (leaf_node.getSelf() == superblock.getRoot()) return true;
 
    // 每个record中最小的项数
-   unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
+   unsigned int min_keys = superblock.getOrder() / 2;
 
     Node cur_node = leaf_node;
     while (cur_node.getSlots() < min_keys) {
@@ -421,6 +421,8 @@ bool Bptree::remove(struct iovec key){
             attach_node(cur_node, parent_id);
         }
         track.pop();
+
+        min_keys = (superblock.getOrder() - 1) / 2;
     }
 
     return true;
