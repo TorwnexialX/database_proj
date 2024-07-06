@@ -248,7 +248,7 @@ void Bptree::attach_node(Node &node, unsigned int node_id){
    node.attach(desp->buffer);
 }
 
-bool remove(struct iovec key){
+bool Bptree::remove(struct iovec key){
     // 读取超级块
     SuperBlock superblock;
     BufDesp *desp = kBuffer.borrow(table_->name_.c_str(), 0);
@@ -278,126 +278,38 @@ bool remove(struct iovec key){
    // 每个record中最小的项数
    unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
 
-    if (leaf_node.getSlots() < min_keys) {
+    Node cur_node = leaf_node;
+    while (cur_node.getSlots() < min_keys) {
+        // 到达根节点则不再向上迭代
+        if (cur_node.getSelf() == superblock.getRoot()) break;
 
+        unsigned int left_right = 0;
+        unsigned int sib_id;
+        bool stop;
+        // 借左兄弟的项
+        {stop, sib_id} = borrow_lsib(cur_node, key);
+        if (stop) return true;
+        // 借右兄弟的项
+        left_right = 1;
+        {stop, sib_id} = borrow_rsib(cur_node, key);
+        if (stop) return true;
+        // 需要合并
+        if (left_right == 0) {
+            Node lsib;
+            unsigned int parent_id;
+            attach_node(lsib, sib_id);
+            {key, parent_id} = merge(lsib, cur_node);
+            attach_node(cur_node, parent_id);
+        }
+        else if (left_right == 1) {
+            Node rsib;
+            unsigned int parent_id;
+            attach_node(rsib, sib_id);
+            {key, parent_id} = merge(cur_node, rsib);
+            attach_node(cur_node, parent_id);
+        }
     }
 
-    return true;
-
-   // 对于当前项数小于最小值时
-   while (leaf_node.getSlots() < min_keys) {
-      // 栈空，说明已经回溯到了根节点
-      if (track.empty()) {
-         // 根节点为空，说明树目前只有一个空的根节点，故将该树设置为空树
-         if (leaf_node.getSlots() == 0) {
-            superblock.setRoot(0);
-            superblock.getDataCounts(0);
-         }
-         return true;
-      }
-
-      // 获取parent节点
-      unsigned int parent_id = track.top();
-      track.pop();
-      Node parent_node;
-      attach_node(parent_node, parent_id);
-
-      // 获取sibling节点
-      unsigned int sibling_id;
-      Node sibling_node;
-
-      // 在parent中查询当前key对应的record
-      unsigned int sibling_info_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
-      unsigned int sibling_key;
-
-      // 默认从左sibling中借键
-
-      // 对于sibling_info_idx > 0的情况，parent中该key对应record的左record中存储着左sibling的信息
-      if (sibling_info_idx > 0) {
-         sibling_info_idx--;
-         // 获得左sibling的info的record
-         Record sibling_info;
-         parent_node.refslots(sibling_info_idx, sibling_info);
-         unsigned int sibling_key_len;
-         sibling_info.getByIndex((char *)&sibling_key, &sibling_key_len, KEY_INDEX);
-         sibling_key = be32toh(sibling_key);
-      }
-
-      // 获得sibling节点id
-      sibling_id = (sibling_info_idx == 0) ? leaf_node.get_left() : sibling_key;
-
-      // 对next域为0(无效)的node进行处理
-      if (sibling_id == 0) {
-         // 获取grand节点
-         unsigned int grand_id = track.top();
-         Node grand_node;
-         attach_node(grand_node, grand_id);
-
-         // 获取uncle节点
-         unsigned int uncle_id;
-         Node uncle_node;
-
-         // 在grand中查询当前key对应的record
-         unsigned int up1_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
-         unsigned int up1_key, up1_key_len;
-         Record up1_record;
-         parent_node.refslots(up1_idx, up1_record);
-         up1_record.getByIndex(&up1_key, &up1_key_len, KEY_INDEX);
-         unsigned int up2_idx = grand_node.searchRecord(up1_key, up1_key_len);
-         unsigned int uncle_idx = up2_idx - 1; // grand中存uncle_node信息的record的idx
-         
-         //// TODO：
-         unsigned int uncle_info_idx = grand_node.searchRecord(&sibling_key, sizeof(sibling_key));
-         unsigned int uncle_key;
-
-         // 默认从左sibling中借键
-
-         // 对于sibling_info_idx > 0的情况，parent中该key对应record的左record中存储着左sibling的信息
-         if (sibling_info_idx > 0) {
-            sibling_info_idx--;
-            // 获得左sibling的info的record
-            Record sibling_info;
-            parent_node.refslots(sibling_info_idx, sibling_info);
-            unsigned int sibling_key_len;
-            sibling_info.getByIndex((char *)&sibling_key, &sibling_key_len, KEY_INDEX);
-            sibling_key = be32toh(sibling_key);
-         }
-
-         // 获得sibling节点id
-         sibling_id = (sibling_info_idx == 0) ? leaf_node.get_left() : sibling_key;
-      }
-      attach_node(sibling_node, sibling_id);
-
-      if (sibling_node.getSlots() > min_keys) {
-         if (sibling_info_idx == 0) {
-            leaf_node.copyRecord(sibling_node);
-            sibling_node.deallocate(sibling_node.getSlots() - 1);
-         } 
-         else {
-            leaf_node.copyRecord(0);
-            sibling_node.deallocate(0);
-         }
-         return true;
-      } 
-      else {
-         if (sibling_info_idx == 0) {
-               sibling_node.setNext(leaf_node.getNext());
-               for (unsigned int i = 0; i < leaf_node.getSlots(); i++) {
-                  sibling_node.copyRecord(i);
-               }
-               leaf_node.deallocateAll();
-         } 
-         else {
-               leaf_node.setNext(sibling_node.getNext());
-               for (unsigned int i = 0; i < sibling_node.getSlots(); i++) {
-                  leaf_node.copyRecord(i);
-               }
-               sibling_node.deallocateAll();
-         }
-         parent_node.deallocate(sibling_info_idx);
-         leaf_node = parent_node;
-      }
-    }
     return true;
 }
 
@@ -544,7 +456,8 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    return {true, rsib_id}; // 借项成功
 }
 
-struct iovec Bptree::merge(Node &left_node, Node &right_node){
+std::pair<struct iovec, unsigned int>
+Bptree::merge(Node &left_node, Node &right_node){
     // 将右节点中的records都复制到左节点中
     while(right_node.getSlots() > 0){
         Record temp;
@@ -581,7 +494,7 @@ struct iovec Bptree::merge(Node &left_node, Node &right_node){
     parent_node.deallocate(right_idx);
     table_->deallocate(right_node.getSelf());
 
-    return key;
+    return {key, parent_id};
 }
 
 }
