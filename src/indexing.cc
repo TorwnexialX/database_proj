@@ -273,6 +273,8 @@ bool remove(struct iovec key){
 
    if (leaf_node.getSelf() == superblock.getRoot()) return true;
 
+
+
    // 每个record中最小的项数
    unsigned int min_keys = (superblock.getOrder() + 1) / 2 - 1;
 
@@ -394,7 +396,8 @@ bool remove(struct iovec key){
 }
 
 // 没有pop，在remove中需要加pop动作
-bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
+std::pair<bool, unsigned int>
+Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    // 获取父节点
    unsigned int parent_id = track.top();
    Node parent_node;
@@ -404,7 +407,7 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
    bool if_same = parent_node.same_key(key, current_index);
    current_index -= (if_same || current_index == 0) ? 0 : 1;
-   if (current_index == 0) return false; // 没有左兄弟
+   if (current_index == 0) return {false, 0}; // 没有左兄弟
 
 
    // 获取左兄弟节点的id信息
@@ -427,7 +430,7 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 
    // 兄弟项不够借
    unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
-   if (left_sibling.getSlots() <= min_entries) return false;
+   if (left_sibling.getSlots() <= min_entries) return {false, lsib_id};
 
    // 将左兄弟的最右侧项复制到当前节点
    Record last_record;
@@ -459,10 +462,11 @@ bool Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    new_kv[1].iov_len = sizeof(new_value);
    parent_node.insertRecord(new_kv);
 
-   return true; // 借项成功
+   return {true, lsib_id}; // 借项成功
 }
 
-bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
+std::pair<bool, unsigned int>
+Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    // 获取父节点
    unsigned int parent_id = track.top();
    Node parent_node;
@@ -478,7 +482,7 @@ bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    else current_index -= if_same ? 0 : 1;
 
    // 没有右兄弟则失败
-   if (current_index == parent_node.getSlots() - 1) return false;
+   if (current_index == parent_node.getSlots() - 1) return {false, 0};
 
    // 获取右兄弟的id信息
    Record rsib_info;
@@ -500,7 +504,7 @@ bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
 
    // 兄弟项不够借
    unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
-   if (right_sibling.getSlots() <= min_entries) return false;
+   if (right_sibling.getSlots() <= min_entries) return {false, rsib_id};
 
    // 将右兄弟的最左侧项复制到当前节点
    Record first_record;
@@ -531,8 +535,39 @@ bool Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    new_kv[1].iov_len = sizeof(new_value);
    parent_node.insertRecord(new_kv);
 
-   return true; // 借项成功
+   return {true, rsib_id}; // 借项成功
 }
 
-bool Bptree::merge()
+bool Bptree::merge(Node &left_node, Node &right_node){
+    // 将右节点中的records都复制到左节点中
+    while(right_node.getSlots() > 0){
+        Record temp;
+        right_node.refslots(0, temp);
+        left_node.copyRecord(temp);
+        right_node.deallocate(0);
+    }
+
+    // 获取父节点
+    unsigned int parent_id = track.top();
+    Node parent_node;
+    attach_node(parent_node, parent_id);
+
+    // 获取右节点的首record键值
+    Record head_record;
+    right_node.refslots(0, head_record);
+    unsigned int head_key, head_key_len;
+    head_record.getByIndex((char *) &head_key, &head_key_len, KEY_INDEX);
+    struct iovec key;
+    key.iov_base = &head_key;
+    key.iov_len = head_key_len;
+
+    // 查找右节点在父节点中的索引
+    unsigned int right_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
+    bool if_same = parent_node.same_key(key, right_idx);
+    right_idx -= if_same ? 0 : 1;
+
+    // 删去右节点在parent中对应的record，并删除右节点
+    parent_node.deallocate(right_idx);
+    table_->deallocate(right_node.getSelf());
+}
 }
