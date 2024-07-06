@@ -567,7 +567,7 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(super.getRoot() == 0);
         
         // 完成初始化，准备开始测试insert
-        super.setOrder(5);
+        super.setOrder(4);
         // 从空树开始插入
         // 插入后数据形状：  10
         int key = 10;
@@ -933,9 +933,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
-        // 数据的形状：                            70
-        //                      30       50                  90
-        //                10  20   30  40   50  60    70  80     90  100  110
+        // 数据的形状：                            [70]
+        //                         [30       50]                    [90]
+        //                [10  20]   [30  40]   [50  60]    [70  80]     [90  100  110]
         // 开始remove的测试
         // 第一种情况：要删除的数据不在Bptree中
         key = 120;
@@ -966,9 +966,6 @@ TEST_CASE("db/indexing.cc"){
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
         // 第三种情况：要删除的数据所在node数据量不足够，向右兄弟借
-        // 数据的形状变为：                         70
-        //                      30       50                  100
-        //                10  20   30  40   50  60    70  90     100  110
         key = 80;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -978,7 +975,9 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-
+        // 数据的形状变为：                         [70]
+        //                         [30       50]                  [100]
+        //                [10  20]   [30  40]   [50  60]   [70  90]    [100  110]
         // 改变数据形状
         key = 75;
         value = 75;
@@ -991,9 +990,40 @@ TEST_CASE("db/indexing.cc"){
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
         // 数据的形状：                            70
-        //                      30       50                  90
-        //                10  20   30  40   50  60    70  75  80     90  100
-
+        //                       [30       50]                  [90]
+        //                [10  20]   [30  40]   [50  60]    [70  75  80]     [90  100]
+        // 第四种情况：要删除的数据所在node数据量不足够，向左兄弟借
+        key = 100;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
+        // 数据的形状变为：                         [70]
+        //                         [30       50]                   [80]
+        //                [10  20]   [30  40]   [50  60]   [70  75]    [80  90]
+        // 第五种情况：要删除的数据所在node数据量不足够，同时左右兄弟均无法借，则触发merge
+        key = 30;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
+        // 第六种情况：说不清楚
+        key = 70;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
     }
-
 }

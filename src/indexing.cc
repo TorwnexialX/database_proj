@@ -112,8 +112,8 @@ unsigned int Bptree::find_leaf(struct iovec key){
         track.push(cur_node.getSelf());
         // 'lb' stands for 'lowerbound'
         unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
-        bool if_same = cur_node.same_key(key, lb_index); 
-        
+        bool if_same = cur_node.same_key(key, lb_index);
+
         // lb_index == 0 走left_node
         if (lb_index == 0 && !if_same) {
             child = cur_node.get_left();
@@ -211,14 +211,14 @@ bool Bptree::insert(struct iovec key, struct iovec value){
        cur_node.insertRecord(iov);
 
        // 判断是否分裂
-       if (cur_node.getSlots() <= superblock.getOrder() - 1) return true;
+       if (cur_node.getSlots() < superblock.getOrder()) return true;
 
         // 执行分裂操作
         // 1. 创建新node
         Node next_node = node_append(&cur_node);
         // 2. 将cur_node数据分开，其中(order + 1) / 2条record放入next_node
         unsigned short mid_record = cur_node.getSlots() / 2;
-        while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
+        while(cur_node.getSlots() > superblock.getOrder() / 2){
             Record record;
             cur_node.refslots(mid_record, record);
             next_node.copyRecord(record);
@@ -232,7 +232,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             unsigned int new_left, new_left_len;
             next_node.refslots(0, redundant_head);
             redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
-            
+
             // 将该信息设置为next_node的next域
             new_left = be32toh(new_left);
             next_node.set_left(new_left);
@@ -240,7 +240,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             // 删除第一个冗余record
             next_node.deallocate(0);
         }
-        
+
         // 获取next_node的首record的key-value
         Record head_record;
         next_node.refslots(0, head_record); // 不确定ref还是copy
@@ -273,7 +273,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
    cur_node.insertRecord(iov);
 
    // 判断是否分裂
-   if (cur_node.getSlots() <= superblock.getOrder() - 1) return true;
+   if (cur_node.getSlots() < superblock.getOrder()) return true;
 
    // 执行分裂操作
    // 1. 创建新node
@@ -281,7 +281,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
    // 2. 将cur_node数据分开，一部分放入next_node
    // 具体来说，假设最大record数为n，则后(n + 1) / 2条record放入next_node
    unsigned short mid_record = cur_node.getSlots() / 2;
-   while(cur_node.getSlots() > (superblock.getOrder() - 1) / 2){
+   while(cur_node.getSlots() > superblock.getOrder() / 2){
        Record record;
        cur_node.refslots(mid_record, record);
        next_node.copyRecord(record);
@@ -376,8 +376,8 @@ bool Bptree::remove(struct iovec key){
     if (!leaf_node.same_key(key, lb_index)) return false;
 
     // 要删除的项在该叶节点中，直接删除其中对应record
-    unsigned leaf_index = lb_index - 1; // TODO
-    leaf_node.deallocate(leaf_id);
+    unsigned &leaf_index = lb_index;
+    leaf_node.deallocate(leaf_index);
 
     // 当前叶节点即根节点，说明树只有一个节点，则删除工作到此结束
     if (leaf_node.getSelf() == superblock.getRoot()) return true;
@@ -390,15 +390,14 @@ bool Bptree::remove(struct iovec key){
         // 到达根节点则不再向上迭代
         if (cur_node.getSelf() == superblock.getRoot()) break;
 
-        unsigned int left_right = 0;
         std::pair<bool, unsigned int> borrow_result;
         bool &stop = borrow_result.first;
         unsigned int& sib_id = borrow_result.second;
         // 借左兄弟的项
         borrow_result = borrow_lsib(cur_node, key);
+        unsigned int left_right = (sib_id != 0) ? 0 : 1;
         if (stop) return true;
         // 借右兄弟的项
-        left_right = 1;
         borrow_result = borrow_rsib(cur_node, key);
         if (stop) return true;
         // 需要合并
@@ -421,7 +420,6 @@ bool Bptree::remove(struct iovec key){
             attach_node(cur_node, parent_id);
         }
         track.pop();
-
         min_keys = (superblock.getOrder() - 1) / 2;
     }
 
@@ -467,7 +465,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    desp->relref();
 
    // 兄弟项不够借
-   unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
+   unsigned int min_entries = current_node.is_leaf() ? superblock.getOrder() / 2 : (superblock.getOrder() - 1) / 2;
    if (left_sibling.getSlots() <= min_entries) return {false, lsib_id};
 
    // 将左兄弟的最右侧项复制到当前节点
@@ -481,9 +479,8 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    // 1. 获取待更新项的键
    Record first_record;
    current_node.refslots(0, first_record);
-   char *new_key_base = nullptr;
-   unsigned int new_key_len;
-   first_record.getByIndex(new_key_base, &new_key_len, KEY_INDEX);
+   unsigned int new_key, new_key_len;
+   first_record.getByIndex((char *) & new_key, &new_key_len, KEY_INDEX);
 
    // 2. 获取待更新项的值
    unsigned int new_value = current_node.getSelf();
@@ -494,7 +491,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 
    // 4. 父节点中添加新项
    std::vector<struct iovec> new_kv(2);
-   new_kv[0].iov_base = (void*) new_key_base;
+   new_kv[0].iov_base = (void*) &new_key;
    new_kv[0].iov_len = new_key_len;
    new_kv[1].iov_base = (void *) &new_value;
    new_kv[1].iov_len = sizeof(new_value);
@@ -516,7 +513,7 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    // 对current_index进行修正(因为其最开始的index是lower_bound的)
    bool if_same = parent_node.same_key(key, current_index);
    unsigned int rsib_info_idx = 1;
-   if (current_index == 0 && !if_same) rsib_info_idx = 0; 
+   if (current_index == 0 && !if_same) rsib_info_idx = 0;
    else current_index -= if_same ? 0 : 1;
 
    // 没有右兄弟则失败
@@ -541,7 +538,7 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    desp->relref();
 
    // 兄弟项不够借
-   unsigned int min_entries = (superblock.getOrder() + 1) / 2 - 1;
+   unsigned int min_entries = current_node.is_leaf() ? superblock.getOrder() / 2 : (superblock.getOrder() - 1) / 2;
    if (right_sibling.getSlots() <= min_entries) return {false, rsib_id};
 
    // 将右兄弟的最左侧项复制到当前节点
@@ -554,9 +551,8 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
 
    // 1. 获取待更新项的键
    right_sibling.refslots(0, first_record);
-   char *new_key_base = nullptr;
-   unsigned int new_key_len;
-   first_record.getByIndex(new_key_base, &new_key_len, KEY_INDEX);
+   unsigned int new_key, new_key_len;
+   first_record.getByIndex((char *) & new_key, &new_key_len, KEY_INDEX);
 
    // 2. 获取待更新项的值
    unsigned int new_value = right_sibling.getSelf();
@@ -567,7 +563,7 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
 
    // 4. 父节点中添加新项
    std::vector<struct iovec> new_kv(2);
-   new_kv[0].iov_base = (void*) new_key_base;
+   new_kv[0].iov_base = (void*) &new_key;
    new_kv[0].iov_len = new_key_len;
    new_kv[1].iov_base = (void *) &new_value;
    new_kv[1].iov_len = sizeof(new_value);
