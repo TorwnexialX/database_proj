@@ -88,13 +88,7 @@ namespace db {
         // 根据给定key在bptree上删除，返回是否成功
         bool remove(struct iovec key);
 
-        // 从左兄弟借项
-        bool borrow_lsib(struct iovec key);
-
-        // 从右兄弟借项
-        bool borrow_rsib(struct iovec key);
-
-        // 上层树更新（从当前栈顶开始）（next域不会涉及到更新）
-        bool tree_update();
+        // 清空树
+        void clear_tree();
     };
 }
