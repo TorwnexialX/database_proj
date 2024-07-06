@@ -65,7 +65,7 @@ namespace db {
 
         // 在给定节点后连接一个新节点，并返回该新节点
         // ATTENTION: 直接返回节点不确定是否会出现bug
-        Node node_append(Node *node, bool is_leaf);
+        Node node_append(Node *node);
 
         // 获取根节点id
         std::pair<bool, unsigned int> get_root();
