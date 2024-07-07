@@ -639,6 +639,9 @@ void Bptree::visualize() {
 
     while (!node_queue.empty()) {
         int level_size = (int) node_queue.size();
+        std::vector<std::string> current_level;
+        std::queue<unsigned int> next_level_queue;
+
         while (level_size--) {
             unsigned int current_node_id = node_queue.front();
             node_queue.pop();
@@ -646,12 +649,15 @@ void Bptree::visualize() {
             Node current_node;
             attach_node(current_node, current_node_id);
 
-            std::cout << "[Node " << current_node_id << "] ";
+            std::string node_str = "[Node " + std::to_string(current_node_id) + "] ";
+            if (current_node.getNext() != 0) {
+                node_str += "(\\," + std::to_string(current_node.getNext()) + ") ";
+            }
             for (int i = 0; i < current_node.getSlots(); ++i) {
                 Record record;
                 current_node.refslots(i, record);
 
-                unsigned char *pkey;
+                unsigned char* pkey;
                 unsigned int key_len;
                 record.refByIndex(&pkey, &key_len, KEY_INDEX);
                 unsigned int key;
@@ -665,32 +671,39 @@ void Bptree::visualize() {
                 memcpy(&value, pvalue, value_len);
                 value = be32toh(value);
 
-                std::cout << "(" << key << "," << value << ")" <<" ";
+                node_str += "(" + std::to_string(key) + "," + std::to_string(value) + ") ";
             }
-            std::cout << " | ";
+            node_str += " | ";
+            current_level.push_back(node_str);
 
             if (!current_node.is_leaf()) {
+                if (current_node.getNext() != 0) {
+                    next_level_queue.push(current_node.getNext());
+                }
                 for (int i = 0; i < current_node.getSlots(); ++i) {
                     Record record;
                     current_node.refslots(i, record);
 
-                    unsigned char *pvalue;
+                    unsigned char* pvalue;
                     unsigned int value_len;
                     int value;
                     record.refByIndex(&pvalue, &value_len, VALUE_INDEX);
                     memcpy(&value, pvalue, value_len);
                     value = be32toh(value);
 
-                    node_queue.push(value);
-                }
-                if (current_node.getNext() != 0) {
-                    node_queue.push(current_node.getNext());
+                    next_level_queue.push(value);
                 }
             }
         }
+
+        for (const auto& str : current_level) {
+            std::cout << str;
+        }
         std::cout << std::endl;
+
+        // Move next level nodes to the main queue
+        node_queue = next_level_queue;
     }
 }
-
 
 }
