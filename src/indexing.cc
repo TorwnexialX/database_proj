@@ -109,6 +109,17 @@ unsigned int Bptree::find_leaf(struct iovec key){
 
     while(!cur_node.is_leaf()){
         if (cur_node.getSlots() == 0) return 0; // 理论上不该出现
+        // check record
+        for (int i = 0; i < cur_node.getSlots(); ++i) {
+            Record test_record;
+            cur_node.refslots(i, test_record);
+            unsigned int test_key, test_klen;
+            test_record.getByIndex((char*)&test_key, &test_klen, KEY_INDEX);
+            unsigned int test_value, test_vlen;
+            test_record.getByIndex((char*)&test_value, &test_vlen, VALUE_INDEX);
+            Record pause;
+        }
+        // end
         track.push(cur_node.getSelf());
         // 'lb' stands for 'lowerbound'
         unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
@@ -116,23 +127,21 @@ unsigned int Bptree::find_leaf(struct iovec key){
 
         // lb_index == 0 走left_node
         if (lb_index == 0 && !if_same) {
-            child = cur_node.get_left();
+            child = cur_node.getNext();
             child = be32toh(child);
             attach_node(cur_node, child);
         }
 
-       // 如果给定的key与lb_key不同说明该key应在前面的record中
-       lb_index -= if_same ? 0 : 1;
+        // 如果给定的key与lb_key不同说明该key应在前面的record中
+        lb_index -= if_same ? 0 : 1;
 
         Record lb_record;
         int test_slots_num = cur_node.getSlots();
         cur_node.refslots(lb_index, lb_record);
         lb_record.getByIndex((char *)&child, &child_len, VALUE_INDEX);
-        // TODO: key和lb_key的长度，keylen, keylen_lb应该是一样的，但现在有着不同的类型和不同的名词名称
         child = be32toh(child);
         attach_node(cur_node, child);
     }
-
    return child;
 }
 
@@ -235,7 +244,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
             // 将该信息设置为next_node的next域
             new_left = be32toh(new_left);
-            next_node.set_left(new_left);
+            next_node.setNext(new_left);
 
             // 删除第一个冗余record
             next_node.deallocate(0);
@@ -243,7 +252,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
         // 获取next_node的首record的key-value
         Record head_record;
-        next_node.refslots(0, head_record); // 不确定ref还是copy
+        next_node.refslots(0, head_record);
         unsigned int head_key, key_len;
         head_record.getByIndex((char *)&head_key, &key_len, 0);
 
@@ -263,7 +272,6 @@ bool Bptree::insert(struct iovec key, struct iovec value){
    }
 
    // 根节点分裂（此时, node_id == super.get_root()）
-
    // 插入k-v对
    Node cur_node;
    unsigned int cur_node_id = node_id;
@@ -297,7 +305,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
        // 将该信息设置为next_node的next域
        new_left = be32toh(new_left);
-       next_node.set_left(new_left);
+       next_node.setNext(new_left);
 
        // 删除第一个冗余record
        next_node.deallocate(0);
@@ -305,7 +313,7 @@ bool Bptree::insert(struct iovec key, struct iovec value){
 
    // 获取next_node的首record的key-value
    Record head_record;
-   next_node.refslots(0, head_record); // 不确定ref还是copy
+   next_node.refslots(0, head_record);
    unsigned int head_key, key_len;
    head_record.getByIndex((char *)&head_key, &key_len, 0);
 

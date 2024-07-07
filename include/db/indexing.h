@@ -1,7 +1,3 @@
-// 由DataBlock继承出node，新增is_leaf和left_node变量
-// 非叶子节点next无效，用left_node代替
-// 叶子节点next有效，left_node无效
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -27,18 +23,6 @@ namespace db {
         inline void set_leaf(short leaf) {
             DataHeader *header = reinterpret_cast<DataHeader *>(buffer_);
             header->type = leaf;
-        }
-
-        // 获得当前节点的最左侧孩子域
-        inline unsigned int get_left() {
-            MetaHeader *header = reinterpret_cast<MetaHeader *>(buffer_);
-            return be32toh(header->next);
-        }
-
-        // 设置当前节点的最左侧孩子域
-        inline void set_left(unsigned int left_node) {
-            MetaHeader *header = reinterpret_cast<MetaHeader *>(buffer_);
-            header->next = htobe32(left_node);
         }
 
         // 判断当前节点第record_index个record中的键值是否与给定的key一致

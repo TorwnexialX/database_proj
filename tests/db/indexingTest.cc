@@ -13,7 +13,7 @@ TEST_CASE("db/indexing.cc"){
     SECTION("Node::leaf"){
         //打开表
         Table table;
-        table.open("table"); // ATTENTION: 后期需要改成别的表
+        table.open("table");
         //构建一个节点
         unsigned int node_id = table.allocate();
         BufDesp *desp = kBuffer.borrow(table.name_.c_str(), node_id);
@@ -28,12 +28,6 @@ TEST_CASE("db/indexing.cc"){
         // 删除节点
         table.deallocate(node_id);
     }
-
-    // SECTION("Node::get_left");
-
-    // SECTION("Node::set_left");
-
-    // SECTION("Node::same_key");
 
     SECTION("Bptree::set_table")
     {
@@ -67,15 +61,12 @@ TEST_CASE("db/indexing.cc"){
 
         Bptree tree;
         tree.set_table(&table_two, 0, 1);
-        // REQUIRE(tree.table_ == table_two);
-        // TODO:判断key_type与value_type
-        // REQUIRE(tree.key_type == );
-        // REQUIRE(tree.value_type == );
+        // 判断tree是否成功绑上table_two
+        REQUIRE(tree.table_ == &table_two);
+        // 判断key_type与value_type
+        REQUIRE(tree.key_type == findDataType("INT"));
+        REQUIRE(tree.value_type == findDataType("INT"));
     }
-
-    // SECTION("Bptree::attach_node");
-
-    // SECTION("Bptree::node_append");
 
     SECTION("Bptree::clear_tree")
     {
@@ -99,7 +90,7 @@ TEST_CASE("db/indexing.cc"){
         Node root_node;
         root_node.setTable(&table_two);
         tree.attach_node(root_node, root_id);
-        // 插入三个节点
+        // 插入三个记录
         int key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
@@ -129,7 +120,7 @@ TEST_CASE("db/indexing.cc"){
         // 记录3
         // 此时树的结构为
         //                     10               20
-        //       left_child(5)      mid_child(3)     right_child(4)
+        //          left_child      mid_child     right_child
         unsigned int left_child = table_two.allocate();
         root_node.setNext(left_child);
 
@@ -196,14 +187,15 @@ TEST_CASE("db/indexing.cc"){
         // 空树搜索
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
-        // TODO:起一个合适的名字
-        // TODO:设置合适的key_len
-        char empty_test[4];
-        struct iovec empty_test_key;
-        empty_test_key.iov_base = &empty_test;
-        empty_test_key.iov_len = 4;
-        std::pair<bool, struct iovec> ret = tree.search(empty_test_key);
-        REQUIRE(ret.first == false);
+        int key = 1;
+        std::vector<struct iovec> iov(2);
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        std::pair<bool, struct iovec> search_result= tree.search(iov[0]);
+        unsigned int node_id = tree.find_leaf(iov[0]);
+        REQUIRE(search_result.first == false);
+        REQUIRE(node_id == 0);
         // 构建一个根节点
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
@@ -214,13 +206,9 @@ TEST_CASE("db/indexing.cc"){
         tree.attach_node(root_node, root_id);
         root_node.set_leaf(true);
         // 给根节点手动插入记录
-        // 记录1
-        // 此时树的结构为      10
-        //         mid_child
-        int key = 10;
+        key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
-        std::vector<struct iovec> iov(2);
         key = htobe32(key);
         mid_child = htobe32(mid_child);
         iov[0].iov_base = &key;
@@ -229,9 +217,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         root_node.insertRecord(iov);
         mid_child = be32toh(mid_child);
-        // 记录2
-        // 此时树的结构为      10         20
-        //                      mid_child    right_child
+        // 此时树的结构为      10
+        //         mid_child
+        // 插入记录2
         key = 20;
         unsigned int right_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 3);
@@ -243,20 +231,22 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         root_node.insertRecord(iov);
         right_child = be32toh(right_child);
+        // 此时树的结构为      10         20
+        //                      mid_child    right_child
         // 根节点是叶子节点
         struct iovec iov_search;
         iov_search.iov_base = &key;
         iov_search.iov_len = sizeof(int);
-        unsigned int node_id = tree.find_leaf(iov_search);
+        node_id = tree.find_leaf(iov_search);
         REQUIRE(node_id == root_id);
         // 将根节点设置为非叶子节点
         root_node.set_leaf(0);
-        // 记录3
-        // 此时树的结构为
-        //                     10               20
-        //       left_child(5)      mid_child(3)     right_child(4)
+        // 插入记录3
         unsigned int left_child = table_two.allocate();
         root_node.setNext(left_child);
+        // 此时树的结构为
+        //                     10               20
+        //           left_child      mid_child     right_child
         // 搜索左边，先将left_child设置为叶子节点
         tree.attach_node(root_node, left_child);
         root_node.set_leaf(true);
@@ -318,13 +308,11 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(track == root_id);
         REQUIRE(tree.track.size() == 1);
         tree.track.pop();
-
+        // 将树清空
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
     }
-
-    // SECTION("Bptree::reset_track");
     
     SECTION("Bptree::search")
     {
@@ -350,9 +338,6 @@ TEST_CASE("db/indexing.cc"){
         root_node.setTable(&table_two);
         tree.attach_node(root_node, root_id);
         // 给根节点手动插入记录
-        // 记录1
-        // 此时树的结构为      10
-        //         mid_child
         int key = 10;
         unsigned int mid_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 2);
@@ -365,9 +350,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         root_node.insertRecord(iov);
         mid_child = be32toh(mid_child);
-        // 记录2
-        // 此时树的结构为      10         20
-        //                      mid_child    right_child
+        // 此时树的结构为      10
+        //         mid_child
+        // 插入记录2
         key = 20;
         unsigned int right_child = table_two.allocate();
         REQUIRE(table_two.dataCount() == 3);
@@ -379,12 +364,14 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         root_node.insertRecord(iov);
         right_child = be32toh(right_child);
-        // 记录3
-        // 此时树的结构为
-        //                     10               20
-        //       left_child(5)      mid_child(3)     right_child(4)
+        // 此时树的结构为      10         20
+        //                      mid_child    right_child
+        // 插入记录3
         unsigned int left_child = table_two.allocate();
         root_node.setNext(left_child);
+        // 此时树的结构为
+        //                     10               20
+        //           left_child      mid_child     right_child
         // 将left_child设置为叶子节点，并插入数据
         Node left_node;
         tree.attach_node(left_node, left_child);
@@ -489,10 +476,9 @@ TEST_CASE("db/indexing.cc"){
         // 此时right_node: 23,25,27
         // 此时树的结构为
         //                                     10                             20
-        //             3(100)  5(200)  7(300)      13(400)  15(500)  17(600)      23(700)  25(800)  27(900)
-        //                  (left_child)                  (mid_child)                   (right_child)
+        //             [3(100)  5(200)  7(300)]      [13(400)  15(500)  17(600)]      [23(700)  25(800)  27(900)]
         // 开始进行搜索函数测试
-        // 搜索left_child:5
+        // 搜索left_child:3
         struct iovec search_key;
         key = 3;
         key = htobe32(key);
@@ -569,7 +555,6 @@ TEST_CASE("db/indexing.cc"){
         // 完成初始化，准备开始测试insert
         super.setOrder(4);
         // 从空树开始插入
-        // 插入后数据形状：  10
         int key = 10;
         int value = 10;
         std::vector<struct iovec> iov(2);
@@ -586,9 +571,8 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
         REQUIRE(super.getRoot() != 0);     
-        
+        // 插入后数据形状：  10
         // 继续插入数据
-        // 插入后数据形状：  10  20
         key = 20;
         value = 20;
         key = htobe32(key);
@@ -603,9 +587,8 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-        
+        // 插入后数据形状：  10  20
         // 继续插入数据
-        // 插入后数据形状：  10  20  30
         key = 30;
         value = 30;
         key = htobe32(key);
@@ -620,10 +603,8 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
+        // 插入后数据形状：  10  20  30
         // 插入第四个数据后，节点分裂
-        // 数据的形状：         30
-        //               10 20      30 40
         key = 40;
         value = 40;
         key = htobe32(key);
@@ -638,7 +619,8 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-        
+        // 数据的形状：         30
+        //               10 20      30 40
         // 插入重复数据10，测试无法插入的情况
         key = 10;
         value = 10;
@@ -649,13 +631,8 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_base = &value;
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
-        REQUIRE(success_insert == false);
-        
-        // TODO:弄清这个顶层Search功能是什么，为什么要这么测试，对代码进行修改
-        // 插入新数据，用于测试顶层Search功能(老师的代码这么说)
+        REQUIRE(success_insert == false);     
         // 插入第五个数据
-        // 数据的形状：         30
-        //               10 20      30 40 50
         key = 50;
         value = 50;
         key = htobe32(key);
@@ -670,10 +647,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
+        // 数据的形状：         30
+        //               10 20      30 40 50
         // 插入第六个数据，节点分裂
-        // 数据的形状：          30        50
-        //               10 20      30 40      50  60
         key = 60;
         value = 60;
         key = htobe32(key);
@@ -688,10 +664,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
-        // 插入第七个数据
         // 数据的形状：          30        50
-        //               10 20      30 40      50  60  70
+        //               10 20      30 40      50  60
+        // 插入第七个数据
         key = 70;
         value = 70;
         key = htobe32(key);
@@ -706,10 +681,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
+        // 数据的形状：          30        50
+        //               10 20      30 40      50  60  70
         // 插入第八个数据，节点分裂
-        // 数据的形状：          30          50          70
-        //                10 20      30 40      50  60      70  80
         key = 80;
         value = 80;
         key = htobe32(key);
@@ -724,10 +698,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
-        // 插入第九个数据
         // 数据的形状：          30          50          70
-        //                10 20      30 40      50  60      70  80  90
+        //                10 20      30 40      50  60      70  80
+        // 插入第九个数据
         key = 90;
         value = 90;
         key = htobe32(key);
@@ -742,11 +715,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
+        // 数据的形状：          30          50          70
+        //                10 20      30 40      50  60      70  80  90
         // 插入第十个数据，节点分裂(注意：此处两个节点连续分裂)
-        // 数据的形状：                        70
-        //                      30       50                  90
-        //                10  20   30  40   50  60    70  80     90  100
         key = 100;
         value = 100;
         key = htobe32(key);
@@ -761,8 +732,9 @@ TEST_CASE("db/indexing.cc"){
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
-
-        // 测试顶层Search功能
+        // 数据的形状：                        [70]
+        //                      [30       50]                  [90]
+        //                [10  20]   [30  40]   [50  60]    [70  80]     [90  100]
         struct iovec unique_key;
         key = 50;
         key = htobe32(key);
