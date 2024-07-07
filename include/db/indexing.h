@@ -83,5 +83,9 @@ namespace db {
         // 合并，返回merge后父节点中删除的记录的key
         std::pair<struct iovec, unsigned int>
         merge(Node &left_node, Node &right_node);
+
+        // 用于可视化B+树的函数
+        void visualize();
+
     };
 }

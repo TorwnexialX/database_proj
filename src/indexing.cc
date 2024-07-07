@@ -1,3 +1,5 @@
+#include <iostream>
+#include <queue>
 #include "db/block.h"
 #include "db/table.h"
 #include "db/buffer.h"
@@ -622,5 +624,73 @@ Bptree::merge(Node &left_node, Node &right_node){
 
     return {key, parent_id};
 }
+
+// 用于可视化B+树的函数
+void Bptree::visualize() {
+    std::pair<bool, unsigned int> root_info = get_root();
+    if (!root_info.first) {
+        std::cout << "当前树为空树" << std::endl;
+        return;
+    }
+
+    unsigned int root_id = root_info.second;
+    std::queue<unsigned int> node_queue;
+    node_queue.push(root_id);
+
+    while (!node_queue.empty()) {
+        int level_size = (int) node_queue.size();
+        while (level_size--) {
+            unsigned int current_node_id = node_queue.front();
+            node_queue.pop();
+
+            Node current_node;
+            attach_node(current_node, current_node_id);
+
+            std::cout << "[Node " << current_node_id << "] ";
+            for (int i = 0; i < current_node.getSlots(); ++i) {
+                Record record;
+                current_node.refslots(i, record);
+
+                unsigned char *pkey;
+                unsigned int key_len;
+                record.refByIndex(&pkey, &key_len, KEY_INDEX);
+                unsigned int key;
+                memcpy(&key, pkey, key_len);
+                key = be32toh(key);
+
+                unsigned char* pvalue;
+                unsigned int value_len;
+                record.refByIndex(&pvalue, &value_len, VALUE_INDEX);
+                unsigned int value;
+                memcpy(&value, pvalue, value_len);
+                value = be32toh(value);
+
+                std::cout << "(" << key << "," << value << ")" <<" ";
+            }
+            std::cout << " | ";
+
+            if (!current_node.is_leaf()) {
+                for (int i = 0; i < current_node.getSlots(); ++i) {
+                    Record record;
+                    current_node.refslots(i, record);
+
+                    unsigned char *pvalue;
+                    unsigned int value_len;
+                    int value;
+                    record.refByIndex(&pvalue, &value_len, VALUE_INDEX);
+                    memcpy(&value, pvalue, value_len);
+                    value = be32toh(value);
+
+                    node_queue.push(value);
+                }
+                if (current_node.getNext() != 0) {
+                    node_queue.push(current_node.getNext());
+                }
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+
 
 }

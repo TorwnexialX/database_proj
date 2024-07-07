@@ -741,6 +741,7 @@ TEST_CASE("db/indexing.cc"){
         unique_key.iov_base = &key;
         unique_key.iov_len = sizeof(int);
         search_result = tree.search(unique_key);
+        tree.visualize();
         REQUIRE(search_result.first == true);
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
         
