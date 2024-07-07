@@ -8,8 +8,39 @@
 #include <db/file.h>
 #include <db/table.h>
 #include <db/indexing.h>
+#include <chrono>
+#include <iostream>
 
 using namespace db;
+
+class Timer {
+public:
+    // 构造函数，初始化时不会开始计时
+    Timer() : start_time_point{}, end_time_point{}, is_running{ false } {}
+
+    // 开始计时
+    void start() {
+        start_time_point = std::chrono::high_resolution_clock::now();
+        is_running = true;
+    }
+
+    // 结束计时，并返回花费的时间（以秒为单位）
+    double stop() {
+        if (!is_running) {
+            std::cerr << "Timer was not started!" << std::endl;
+            return 0.0;
+        }
+        end_time_point = std::chrono::high_resolution_clock::now();
+        is_running = false;
+        std::chrono::duration<double> elapsed_time = end_time_point - start_time_point;
+        return elapsed_time.count();
+    }
+
+private:
+    std::chrono::high_resolution_clock::time_point start_time_point;
+    std::chrono::high_resolution_clock::time_point end_time_point;
+    bool is_running;
+};
 
 TEST_CASE("db/indexing.cc"){
     SECTION("Node::leaf"){
@@ -328,9 +359,7 @@ TEST_CASE("db/indexing.cc"){
          BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
          super.attach(desp->buffer);
          desp->relref();
-
          REQUIRE(table_two.dataCount() == 0);
-
         // 构建一个根节点
         unsigned int root_id = table_two.allocate();
         REQUIRE(table_two.dataCount() == 1);
@@ -752,14 +781,13 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
         // 设置树的阶数
-        // ATTENTION:老师代码中写的是200，不知道是否有什么特殊意义
-        super.setOrder(200);
+        super.setOrder(100);
 
         //连续插入数据
-        //在我们的测试中对于500阶的索引树，datablock_num可达到4000000
         int success_num = 0;
-        // ATTENTION:老师代码中插入数据数选择了1000
         int node_num = 1000;
+        Timer timer;
+        timer.start();
         for (int i = 0; i < node_num; ++i){
             key = htobe32(i);
             value = htobe32(i << 2);
@@ -770,6 +798,30 @@ TEST_CASE("db/indexing.cc"){
             success_insert = tree.insert(iov[0], iov[1]);
             if (success_insert == true) success_num++;
         }
+        double elapsed_time = timer.stop();
+        std::cout << "Bptree operation time: " << elapsed_time << " seconds" << std::endl;
+        REQUIRE(super.getRoot() != 0);
+        // 清空树
+        tree.clear_tree();
+        super.setRoot(0);
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getRoot() == 0);
+        // 性能分析：插入两倍数据
+        success_num = 0;
+        node_num = 2000;
+        timer.start();
+        for (int i = 0; i < node_num; ++i){
+            key = htobe32(i);
+            value = htobe32(i << 2);
+            iov[0].iov_base = &key;
+            iov[0].iov_len = sizeof(key);
+            iov[1].iov_base = &value;
+            iov[1].iov_len = sizeof(int);
+            success_insert = tree.insert(iov[0], iov[1]);
+            if (success_insert == true) success_num++;
+        }
+        elapsed_time = timer.stop();
+        std::cout << "Bptree operation time two: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
         // 清空树
         tree.clear_tree();
@@ -805,7 +857,7 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
         // 插入数据构造
-        // 具体的remove测试从932行开始
+        // 具体的remove测试从当前行+118行开始
         super.setOrder(4);
         // 插入数据
         int key = 10;
@@ -1024,7 +1076,7 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状变为：                              [70]
         //                                   [50]                   [90]
         //                      [10  20  40]      [50  60]   [70  75]    [90   110]
-        // 第六种情况：说不清楚
+        // 第六种情况：节点删除触发了多层merge，还涉及到根节点下放的操作
         key = 70;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -1037,9 +1089,8 @@ TEST_CASE("db/indexing.cc"){
         std::cout << "删除70后树形(兄弟节点键不够，需要merge，上层也需更新)：" << std::endl;
         tree.visualize();
         std::cout << std::endl;
-        // maybe
-        // 数据的形状变为：                              [70]
-        //                                   [50]                   [75]
-        //                      [10  20  40]      [50  60]              [75  90  110]
+        // 数据的形状变为：                             
+        //                                    [50               70]
+        //                      [10  20  40]        [50  60]          [75  90  110]
     }
 }
