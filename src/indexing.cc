@@ -75,17 +75,6 @@ std::pair<bool, struct iovec> Bptree::search(struct iovec key) {
     Record record;
     Node leaf_node;
     attach_node(leaf_node, leaf_id);
-    // check record
-    for (int i = 0; i < leaf_node.getSlots(); ++i) {
-        Record test_record;
-        leaf_node.refslots(i, test_record);
-        unsigned int test_key, test_klen;
-        test_record.getByIndex((char*) & test_key, &test_klen, KEY_INDEX);
-        unsigned int test_value, test_vlen;
-        test_record.getByIndex((char*) & test_value, &test_vlen, VALUE_INDEX);
-        Record pause;
-    }
-    // end
     unsigned int index = leaf_node.searchRecord(key.iov_base, key.iov_len);
     bool if_same = leaf_node.same_key(key, index);
     // 没有查询到key所对应的value
@@ -110,18 +99,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
    reset_track();
 
     while(!cur_node.is_leaf()){
-        if (cur_node.getSlots() == 0) return 0; // 理论上不该出现
-        // check record
-        for (int i = 0; i < cur_node.getSlots(); ++i) {
-            Record test_record;
-            cur_node.refslots(i, test_record);
-            unsigned int test_key, test_klen;
-            test_record.getByIndex((char*)&test_key, &test_klen, KEY_INDEX);
-            unsigned int test_value, test_vlen;
-            test_record.getByIndex((char*)&test_value, &test_vlen, VALUE_INDEX);
-            Record pause;
-        }
-        // end
+        if (cur_node.getSlots() == 0) return 0; 
         track.push(cur_node.getSelf());
         // 'lb' stands for 'lowerbound'
         unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
