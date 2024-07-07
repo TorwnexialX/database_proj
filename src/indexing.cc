@@ -437,6 +437,12 @@ bool Bptree::remove(struct iovec key){
         min_keys = (superblock.getOrder() - 1) / 2;
     }
 
+    // 若根节点被借空，且根节点不是叶子结点，那么真正的根节点由当前根节点的next指出
+    if (cur_node.getSelf() == superblock.getRoot() && !cur_node.is_leaf() && cur_node.getSlots() == 0) {
+        superblock.setRoot(cur_node.getNext());
+        table_->deallocate(cur_node.getSelf());
+    }
+    
     return true;
 }
 
@@ -448,7 +454,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
     attach_node(parent_node, parent_id);
 
     // 若当前节点对应parent中next域，则没有左兄弟
-    if (parent_node.getNext() == current_node.getNext()) return { false, 0 };
+    if (parent_node.getNext() == current_node.getSelf()) return { false, 0 };
 
     // 获取parent中右节点对应record的索引
     unsigned int current_index;
@@ -469,6 +475,8 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
             current_index = i;
             break;
         }
+
+        // 若找到最后一个record都没找到，那么说明
     }
 
     // 获取左兄弟id
@@ -669,7 +677,7 @@ Bptree::merge(Node &left_node, Node &right_node){
     if (!right_node.is_leaf()) {
         // 将next域等价的key-value封装为record插入左节点
         std::vector < struct iovec > iov(2);
-        unsigned new_value = right_node.getSelf();
+        unsigned new_value = right_node.getNext();
         new_value = htobe32(new_value);
         iov[0] = key;
         iov[1].iov_base = &new_value;
@@ -687,7 +695,7 @@ Bptree::merge(Node &left_node, Node &right_node){
 
     // 删去右节点在parent中对应的record，并删除右节点
     parent_node.deallocate(right_idx);
-    left_node.setNext(right_node.getSelf());
+    if (left_node.is_leaf()) left_node.setNext(right_node.getNext());
     table_->deallocate(right_node.getSelf());
 
     return {key, parent_id};

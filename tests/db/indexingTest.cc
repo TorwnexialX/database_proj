@@ -1,4 +1,5 @@
 #include <iostream>
+#include <windows.h>
 #include "../catch.hpp"
 #include <db/block.h>
 #include <db/endian.h>
@@ -779,6 +780,9 @@ TEST_CASE("db/indexing.cc"){
 
     SECTION("Bptree::remove")
     {
+        // 防止输出的中文乱码
+        SetConsoleOutputCP(CP_UTF8);
+        
         //打开表
         Table table_two;
         table_two.open("table_two");
