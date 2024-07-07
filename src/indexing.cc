@@ -236,22 +236,6 @@ bool Bptree::insert(struct iovec key, struct iovec value){
             cur_node.deallocate(mid_record);
         }
 
-        // 对于非叶子节点，要删除next_node的第一个冗余record
-        if (!cur_node.is_leaf()){
-            // 将第一个冗余record中的value信息提取出来
-            Record redundant_head;
-            unsigned int new_left, new_left_len;
-            next_node.refslots(0, redundant_head);
-            redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
-
-            // 将该信息设置为next_node的next域
-            new_left = be32toh(new_left);
-            next_node.setNext(new_left);
-
-            // 删除第一个冗余record
-            next_node.deallocate(0);
-        }
-
         // 获取next_node的首record的key-value
         Record head_record;
         next_node.refslots(0, head_record);
@@ -267,6 +251,22 @@ bool Bptree::insert(struct iovec key, struct iovec value){
         new_value= htobe32(new_value);
         value.iov_base = &new_value;
         value.iov_len = sizeof(new_value);
+
+        // 对于非叶子节点，要删除next_node的第一个冗余record
+        if (!cur_node.is_leaf()){
+            // 将第一个冗余record中的value信息提取出来
+            Record redundant_head;
+            unsigned int new_left, new_left_len;
+            next_node.refslots(0, redundant_head);
+            redundant_head.getByIndex((char*) &new_left, &new_left_len, VALUE_INDEX);
+
+            // 将该信息设置为next_node的next域
+            new_left = be32toh(new_left);
+            next_node.setNext(new_left);
+
+            // 删除第一个冗余record
+            next_node.deallocate(0);
+        }
 
        // 更新 node_id
        node_id = track.top();
@@ -298,6 +298,16 @@ bool Bptree::insert(struct iovec key, struct iovec value){
        cur_node.deallocate(mid_record);
    }
 
+   // 获取next_node的首record的key-value
+   Record head_record;
+   next_node.refslots(0, head_record);
+   unsigned int head_key, key_len;
+   head_record.getByIndex((char *)&head_key, &key_len, 0);
+
+   // 获取next_node的id
+   unsigned int next_node_id = next_node.getSelf();
+   next_node_id = htobe32(next_node_id);
+
    if (!cur_node.is_leaf()) {
        // 将第一个冗余record中的value信息提取出来
        Record redundant_head;
@@ -312,16 +322,6 @@ bool Bptree::insert(struct iovec key, struct iovec value){
        // 删除第一个冗余record
        next_node.deallocate(0);
    }
-
-   // 获取next_node的首record的key-value
-   Record head_record;
-   next_node.refslots(0, head_record);
-   unsigned int head_key, key_len;
-   head_record.getByIndex((char *)&head_key, &key_len, 0);
-
-   // 获取next_node的id
-   unsigned int next_node_id = next_node.getSelf();
-   next_node_id = htobe32(next_node_id);
 
     // 创建新的根节点
     unsigned int new_root_id = table_->allocate();
@@ -453,7 +453,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    // 若节点为同parent的第二左节点，则左兄弟在next中指出
    if (current_index == 0 && if_same) lsib_id = parent_node.getNext();
    // 其他情况下对current_index做lower_bound修正
-   else current_index -= if_same ? 0 : 1;
+   else current_index -= if_same ? 0 : 1; 
 
    // 获取左兄弟节点的id信息
     if (lsib_id == 0){
@@ -525,10 +525,11 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
    bool if_same = parent_node.same_key(key, current_index);
    unsigned int rsib_info_idx = 1;
    if (current_index == 0 && !if_same) rsib_info_idx = 0;
-   else current_index -= if_same ? 0 : 1;
-
-   // 没有右兄弟则失败
-   if (current_index == parent_node.getSlots() - 1) return {false, 0};
+   else {
+       current_index -= if_same ? 0 : 1;
+       // 没有右兄弟则失败
+       if (current_index == parent_node.getSlots() - 1) return { false, 0 };
+   }
 
    // 获取右兄弟的id信息
    Record rsib_info;
@@ -585,6 +586,46 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
 
 std::pair<struct iovec, unsigned int>
 Bptree::merge(Node &left_node, Node &right_node){
+    // 获取parent
+    unsigned int parent_id = track.top();
+    Node parent_node;
+    attach_node(parent_node, parent_id);
+
+    // 获取parent中右节点对应record的索引及其key
+    unsigned int right_idx;
+    struct iovec key;
+    for (int i = 0; i < parent_node.getSlots(); ++i) {
+        // 遍历parent中每个record
+        unsigned int value, value_len;
+        Record temp_record;
+        parent_node.refslots(i, temp_record);
+        temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
+        value = be32toh(value);
+
+        // 若某record中的value对应右节点的id，则该record即待删record
+        if (value == right_node.getSelf()) {
+            unsigned int temp_key, key_len;
+            temp_record.getByIndex((char*)&temp_key, &key_len, KEY_INDEX);
+            key.iov_base = &temp_key;
+            key.iov_len = key_len;
+            right_idx = i;
+            break;
+        }
+    }
+
+    // 若该层节点不是叶子，则需要把next域包装成record复制到左节点中
+    // 而该next域对应的key应该是其在parent节点中到右节点对应record
+    if (!right_node.is_leaf()) {
+        // 将next域等价的key-value封装为record插入左节点
+        std::vector < struct iovec > iov(2);
+        unsigned new_value = right_node.getSelf();
+        new_value = htobe32(new_value);
+        iov[0] = key;
+        iov[1].iov_base = &new_value;
+        iov[1].iov_len = sizeof(new_value);
+        left_node.insertRecord(iov);
+    }
+
     // 将右节点中的records都复制到左节点中
     while(right_node.getSlots() > 0){
         Record temp;
@@ -592,31 +633,6 @@ Bptree::merge(Node &left_node, Node &right_node){
         left_node.copyRecord(temp);
         right_node.deallocate(0);
     }
-
-    // 获取父节点
-    unsigned int parent_id = track.top();
-    Node parent_node;
-    attach_node(parent_node, parent_id);
-
-    // 获取右节点的首record键值
-    Record head_record;
-    right_node.refslots(0, head_record);
-    unsigned int head_key, head_key_len;
-    head_record.getByIndex((char *) &head_key, &head_key_len, KEY_INDEX);
-    struct iovec key;
-    key.iov_base = &head_key;
-    key.iov_len = head_key_len;
-
-    // 查找右节点在父节点中的索引
-    unsigned int right_idx = parent_node.searchRecord(key.iov_base, key.iov_len);
-    bool if_same = parent_node.same_key(key, right_idx);
-    right_idx -= if_same ? 0 : 1;
-
-    // 获得rigt_record的key
-    Record right_record;
-    parent_node.refslots(right_idx, right_record);
-    unsigned int keylen;
-    right_record.getByIndex((char *) &key.iov_base, &keylen, KEY_INDEX);
 
     // 删去右节点在parent中对应的record，并删除右节点
     parent_node.deallocate(right_idx);
