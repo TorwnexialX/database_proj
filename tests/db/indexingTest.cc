@@ -70,6 +70,41 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(tree.value_type == findDataType("INT"));
     }
 
+    SECTION("Bptree::get_root")
+    {
+        //打开表
+        Table table_two;
+        table_two.open("table_two");
+        Bptree tree;
+        tree.set_table(&table_two, 0, 1);
+        // 读超级块
+        SuperBlock super;
+        BufDesp* desp = kBuffer.borrow(table_two.name_.c_str(), 0);
+        super.attach(desp->buffer);
+        desp->relref();
+        // 测试get_root,根节点为空的情况
+        std::pair<bool, unsigned int> root_test = tree.get_root();
+        REQUIRE(root_test.first == false);
+        REQUIRE(root_test.second == super.getRoot());
+        // 构建一个根节点
+        unsigned int root_id = table_two.allocate();
+        REQUIRE(table_two.dataCount() == 1);
+        super.setRoot(root_id);
+        // 读根节点，根节点设置为叶子节点
+        Node root_node;
+        root_node.setTable(&table_two);
+        tree.attach_node(root_node, root_id);
+        root_node.set_leaf(true);
+        REQUIRE(super.getRoot() == root_id);
+        root_test = tree.get_root();
+        REQUIRE(root_test.first == true);
+        REQUIRE(root_test.second == super.getRoot());
+        //清空手动建的树
+        tree.clear_tree();
+        REQUIRE(table_two.dataCount() == 0);
+        REQUIRE(super.getRoot() == 0);
+    }
+    
     SECTION("Bptree::clear_tree")
     {
         //打开表
@@ -134,41 +169,6 @@ TEST_CASE("db/indexing.cc"){
         tree.attach_node(root_node, right_child);
         root_node.set_leaf(true);
         // 测试清空树的功能
-        tree.clear_tree();
-        REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getRoot() == 0);
-    }
-
-    SECTION("Bptree::get_root")
-    {
-        //打开表
-        Table table_two;
-        table_two.open("table_two");
-        Bptree tree;
-        tree.set_table(&table_two, 0, 1);
-        // 读超级块
-        SuperBlock super;
-        BufDesp *desp = kBuffer.borrow(table_two.name_.c_str(), 0);
-        super.attach(desp->buffer);
-        desp->relref();
-        // 测试get_root,根节点为空的情况
-        std::pair<bool, unsigned int> root_test = tree.get_root();
-        REQUIRE(root_test.first == false);
-        REQUIRE(root_test.second == super.getRoot());
-        // 构建一个根节点
-        unsigned int root_id = table_two.allocate();
-        REQUIRE(table_two.dataCount() == 1);
-        super.setRoot(root_id);
-        // 读根节点，根节点设置为叶子节点
-        Node root_node;
-        root_node.setTable(&table_two);
-        tree.attach_node(root_node, root_id);
-        root_node.set_leaf(true);
-        REQUIRE(super.getRoot() == root_id);
-        root_test = tree.get_root();
-        REQUIRE(root_test.first == true);
-        REQUIRE(root_test.second == super.getRoot());
-        //清空手动建的树
         tree.clear_tree();
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
