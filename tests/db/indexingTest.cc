@@ -100,9 +100,9 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(root_test.first == true);
         REQUIRE(root_test.second == super.getRoot());
         //清空手动建的树
-        tree.clear_tree();
+        table_two.deallocate(root_id);
+        super.setRoot(0);
         REQUIRE(table_two.dataCount() == 0);
-        REQUIRE(super.getRoot() == 0);
     }
     
     SECTION("Bptree::clear_tree")
