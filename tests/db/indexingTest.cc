@@ -793,6 +793,14 @@ TEST_CASE("db/indexing.cc"){
         BufDesp* desp = kBuffer.borrow(table_two.name_.c_str(), 0);
         super.attach(desp->buffer);
         desp->relref();
+        // 空树删除
+        std::vector<struct iovec> iov(2);
+        int empty_test_key = 2024;
+        empty_test_key = htobe32(empty_test_key);
+        iov[0].iov_base = &empty_test_key;
+        iov[0].iov_len = sizeof(int);
+        bool remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == false);
         // 空树搜索
         REQUIRE(table_two.dataCount() == 0);
         REQUIRE(super.getRoot() == 0);
@@ -802,7 +810,6 @@ TEST_CASE("db/indexing.cc"){
         // 插入数据
         int key = 10;
         int value = 10;
-        std::vector<struct iovec> iov(2);
         key = htobe32(key);
         value = htobe32(value);
         iov[0].iov_base = &key;
@@ -922,7 +929,7 @@ TEST_CASE("db/indexing.cc"){
         key = htobe32(key);
         iov[0].iov_base = &key;
         iov[0].iov_len = sizeof(int);
-        bool remove_result = tree.remove(iov[0]);
+        remove_result = tree.remove(iov[0]);
         REQUIRE(remove_result == false);
         std::cout << "删除120后树形(不存在，树形不变)：" << std::endl;
         tree.visualize();
