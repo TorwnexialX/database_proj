@@ -442,35 +442,53 @@ bool Bptree::remove(struct iovec key){
 
 std::pair<bool, unsigned int>
 Bptree::borrow_lsib(Node &current_node, struct iovec key) {
-   // 获取父节点
-   unsigned int parent_id = track.top();
-   Node parent_node;
-   attach_node(parent_node, parent_id);
+    // 获取parent
+    unsigned int parent_id = track.top();
+    Node parent_node;
+    attach_node(parent_node, parent_id);
 
-   // 查找当前节点在父节点中的索引
-   unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
-   bool if_same = parent_node.same_key(key, current_index);
-   unsigned int lsib_id = 0;
-   // 若节点为同Parent的最左节点，则没有左兄弟
-   if (current_index == 0 && !if_same) return {false, 0};
-   // 若节点为同parent的第二左节点，则左兄弟在next中指出
-   if (current_index == 0 && if_same) lsib_id = parent_node.getNext();
-   // 其他情况下对current_index做lower_bound修正
-   else current_index -= if_same ? 0 : 1; 
+    // 若当前节点对应parent中next域，则没有左兄弟
+    if (parent_node.getNext() == current_node.getNext()) return { false, 0 };
 
-   // 获取左兄弟节点的id信息
-    if (lsib_id == 0){
+    // 获取parent中右节点对应record的索引
+    unsigned int current_index;
+    for (int i = 0; i < parent_node.getSlots(); ++i) {
+        // 遍历parent中每个record
+        unsigned int value, value_len;
+        Record temp_record;
+        parent_node.refslots(i, temp_record);
+        temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
+        value = be32toh(value);
+
+        // 若某record中的value对应右节点的id，则该record即待删record
+        if (value == current_node.getSelf()) {
+            unsigned int temp_key, key_len;
+            temp_record.getByIndex((char*)&temp_key, &key_len, KEY_INDEX);
+            key.iov_base = &temp_key;
+            key.iov_len = key_len;
+            current_index = i;
+            break;
+        }
+    }
+
+    // 获取左兄弟id
+    unsigned int lsib_id;
+
+    // 若当前节点对应parent中首个record，则其左兄弟id由parent的next指出
+    if (current_index == 0) lsib_id = parent_node.getNext();
+    // 其它情况下从左record中获得左兄弟的id
+    else {
         Record lsib_info;
         unsigned int lsib_info_idx = current_index - 1;
         unsigned int lsib_id_len;
         parent_node.refslots(lsib_info_idx, lsib_info);
-        lsib_info.getByIndex((char *)&lsib_id, &lsib_id_len, VALUE_INDEX);
+        lsib_info.getByIndex((char*)&lsib_id, &lsib_id_len, VALUE_INDEX);
         lsib_id = be32toh(lsib_id);
     }
 
-   // 获取左兄弟
-   Node left_sibling;
-   attach_node(left_sibling, lsib_id);
+    // 获取左兄弟
+    Node left_sibling;
+    attach_node(left_sibling, lsib_id);
 
    // 检查左兄弟是否有足够的项可以借
    SuperBlock superblock;
@@ -495,7 +513,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    last[1].iov_len = value_len;
    current_node.insertRecord(last);
 
-   // 删除做兄弟的最右侧项
+   // 删除左兄弟的最右侧项
    left_sibling.deallocate(left_sibling.getSlots() - 1);
 
    // 更新父节点中的相关键值
@@ -526,27 +544,47 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 
 std::pair<bool, unsigned int>
 Bptree::borrow_rsib(Node &current_node, struct iovec key) {
-   // 获取父节点
-   unsigned int parent_id = track.top();
-   Node parent_node;
-   attach_node(parent_node, parent_id);
+    // 获取parent
+    unsigned int parent_id = track.top();
+    Node parent_node;
+    attach_node(parent_node, parent_id);
 
-   // 查找当前节点在父节点中的索引
-   unsigned int current_index = parent_node.searchRecord(key.iov_base, key.iov_len);
+    // 获取右兄弟在parent中对应record的索引
+    unsigned int rsib_info_idx;
 
-   // 对current_index进行修正(因为其最开始的index是lower_bound的)
-   bool if_same = parent_node.same_key(key, current_index);
-   unsigned int rsib_info_idx = 1;
-   if (current_index == 0 && !if_same) rsib_info_idx = 0;
-   else {
-       current_index -= if_same ? 0 : 1;
-       // 没有右兄弟则失败
-       if (current_index == parent_node.getSlots() - 1) return { false, 0 };
-   }
+    // 当前节点在parent中对应next域，说明右兄弟对应record为parent中首个record
+    if (current_node.getSelf() == parent_node.getNext()) rsib_info_idx = 0;
+    // 对于其他情况则在parent中搜索
+    else {
+        // 获取parent中右节点对应record的索引
+        unsigned int current_index;
+        for (int i = 0; i < parent_node.getSlots(); ++i) {
+            // 遍历parent中每个record
+            unsigned int value, value_len;
+            Record temp_record;
+            parent_node.refslots(i, temp_record);
+            temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
+            value = be32toh(value);
+
+            // 若某record中的value对应右节点的id，则该record即待删record
+            if (value == current_node.getSelf()) {
+                unsigned int temp_key, key_len;
+                temp_record.getByIndex((char*)&temp_key, &key_len, KEY_INDEX);
+                key.iov_base = &temp_key;
+                key.iov_len = key_len;
+                current_index = i;
+                break;
+            }
+        }
+
+        // 若当前节点对应record在parent中最后一个，则没有右兄弟
+        if (current_index == parent_node.getSlots()) return { false, 0 };
+
+        rsib_info_idx = current_index + 1;
+    }
 
    // 获取右兄弟的id信息
    Record rsib_info;
-   rsib_info_idx = rsib_info_idx == 0 ? 0 : current_index + 1;
    unsigned int rsib_id, rsib_id_len;
    parent_node.refslots(rsib_info_idx, rsib_info);
    rsib_info.getByIndex((char *)&rsib_id, &rsib_id_len, VALUE_INDEX);
