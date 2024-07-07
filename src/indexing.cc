@@ -403,17 +403,20 @@ bool Bptree::remove(struct iovec key){
         std::pair<bool, unsigned int> borrow_result;
         bool &stop = borrow_result.first;
         unsigned int& sib_id = borrow_result.second;
+        unsigned int merge_sib_id = 0;
         // 借左兄弟的项
         borrow_result = borrow_lsib(cur_node, key);
         unsigned int left_right = (sib_id != 0) ? 0 : 1;
+        merge_sib_id = (left_right == 0) ? sib_id : 0;
         if (stop) return true;
         // 借右兄弟的项
         borrow_result = borrow_rsib(cur_node, key);
+        merge_sib_id = (left_right != 0) ? sib_id : merge_sib_id;
         if (stop) return true;
         // 需要合并
         if (left_right == 0) {
             Node lsib;
-            attach_node(lsib, sib_id);
+            attach_node(lsib, merge_sib_id);
             std::pair<struct iovec, unsigned int> merge_result;
             merge_result = merge(lsib, cur_node);
             key = merge_result.first;
@@ -422,7 +425,7 @@ bool Bptree::remove(struct iovec key){
         }
         else if (left_right == 1) {
             Node rsib;
-            attach_node(rsib, sib_id);
+            attach_node(rsib, merge_sib_id);
             std::pair<struct iovec, unsigned int> merge_result;
             merge_result = merge(cur_node, rsib);
             key = merge_result.first;
