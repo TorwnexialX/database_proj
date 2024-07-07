@@ -479,10 +479,20 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
    unsigned int min_entries = current_node.is_leaf() ? superblock.getOrder() / 2 : (superblock.getOrder() - 1) / 2;
    if (left_sibling.getSlots() <= min_entries) return {false, lsib_id};
 
-   // 将左兄弟的最右侧项复制到当前节点
+   // 将左兄弟的最右侧项插入到当前节点
    Record last_record;
    left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
-   current_node.copyRecord(last_record);
+   std::vector<struct iovec> last(2);
+   unsigned int last_key, last_value, key_len, value_len;
+   last_record.getByIndex((char*)&last_key, &key_len, KEY_INDEX);
+   last_record.getByIndex((char*)&last_value, &value_len, VALUE_INDEX);
+   last[0].iov_base = &last_key;
+   last[0].iov_len = key_len;
+   last[1].iov_base = &last_value;
+   last[1].iov_len = value_len;
+   current_node.insertRecord(last);
+
+   // 删除做兄弟的最右侧项
    left_sibling.deallocate(left_sibling.getSlots() - 1);
 
    // 更新父节点中的相关键值
@@ -636,6 +646,7 @@ Bptree::merge(Node &left_node, Node &right_node){
 
     // 删去右节点在parent中对应的record，并删除右节点
     parent_node.deallocate(right_idx);
+    left_node.setNext(right_node.getSelf());
     table_->deallocate(right_node.getSelf());
 
     return {key, parent_id};
