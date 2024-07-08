@@ -447,11 +447,30 @@ bool Bptree::remove(struct iovec key){
     return true;
 }
 
-void Bptree::upper_update(){
-    std::stack<unsigned int> dup_track(track);
+void Bptree::upper_update(struct iovec new_key){
+    // 获取hit_node的id以及内部hit_record的index
     unsigned int hit_node_id = hit_id_idx.first;
     unsigned int hit_index = hit_id_idx.second;
     
+    // 获取hit_node和hit_record
+    Node hit_node;
+    attach_node(hit_node, hit_node_id);
+    Record hit_record;
+    hit_node.refslots(hit_index, hit_record);
+
+    // 获取hit_record中原value，接着删除该record
+    unsigned int origin_value, value_len;
+    hit_record.getByIndex(&origin_value, &value_len, VALUE_INDEX);
+    hit_node.deallocate(hit_index);
+
+    // 插入新的record，其键为new_key，value为origin_value
+    std::vector <struct iovec> iov(2);
+    iov[0] = new_key;
+    iov[1].iov_base = &origin_value;
+    iov[1].iov_len = value_len;
+    hit_node.insertRecord(iov);
+
+    return;
 }
 
 std::pair<bool, unsigned int>
