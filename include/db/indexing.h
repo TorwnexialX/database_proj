@@ -32,6 +32,7 @@ namespace db {
     class Bptree {
         public:
         Table *table_;
+        std::pair<unsigned int, unsigned int> hit_id_idx;
         std::stack<unsigned int> track;
         DataType *key_type;
         DataType *value_type;
@@ -83,6 +84,9 @@ namespace db {
         // 合并，返回merge后父节点中删除的记录的key
         std::pair<struct iovec, unsigned int>
         merge(Node &left_node, Node &right_node);
+
+        // 上层更新
+        void upper_update(struct iovec new_key);
 
         // 用于可视化B+树的函数
         void visualize();

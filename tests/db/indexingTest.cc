@@ -1090,7 +1090,7 @@ TEST_CASE("db/indexing.cc"){
         tree.visualize();
         std::cout << std::endl;
         // 数据的形状变为：                             
-        //                                    [50               70]
+        //                                    [50               75]
         //                      [10  20  40]        [50  60]          [75  90  110]
     }
 }
