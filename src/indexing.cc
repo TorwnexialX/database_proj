@@ -384,7 +384,7 @@ bool Bptree::remove(struct iovec key){
 
         // 将要替换的新key传入上层更新函数，完成更新
         struct iovec new_key;
-        new_key.iov_base = head_key;
+        new_key.iov_base = (void *)&head_key;
         new_key.iov_len = key_len;
 
         upper_update(new_key);
@@ -460,7 +460,7 @@ void Bptree::upper_update(struct iovec new_key){
 
     // 获取hit_record中原value，接着删除该record
     unsigned int origin_value, value_len;
-    hit_record.getByIndex(&origin_value, &value_len, VALUE_INDEX);
+    hit_record.getByIndex((char *) & origin_value, &value_len, VALUE_INDEX);
     hit_node.deallocate(hit_index);
 
     // 插入新的record，其键为new_key，value为origin_value

@@ -1010,6 +1010,33 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
+        // 2:第二种情况：要删除的数据所在node数据量足够，可以直接删，但是需要上层更新
+        key = 90;
+        key = htobe32(key);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        remove_result = tree.remove(iov[0]);
+        REQUIRE(remove_result == true);
+        // 用search检验是否成功remove
+        search_result = tree.search(iov[0]);
+        REQUIRE(search_result.first == false);
+        std::cout << "删除90后树形：" << std::endl;
+        tree.visualize();
+        std::cout << std::endl;
+        // 将120插入
+        key = 120;
+        value = 120;
+        key = htobe32(key);
+        value = htobe32(value);
+        iov[0].iov_base = &key;
+        iov[0].iov_len = sizeof(int);
+        iov[1].iov_base = &value;
+        iov[1].iov_len = sizeof(int);
+        success_insert = tree.insert(iov[0], iov[1]);
+        REQUIRE(success_insert == true);
+        std::cout << "插入120后树形：" << std::endl;
+        tree.visualize();
+        std::cout << std::endl;
         // 第三种情况：要删除的数据所在node数据量不足够，向右兄弟借
         key = 80;
         key = htobe32(key);
@@ -1020,12 +1047,12 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        std::cout << "先插入110还原树形，再删除80后树形(需要向右兄弟借键)：" << std::endl;
+        std::cout << "删除80后树形(需要向右兄弟借键)：" << std::endl;
         tree.visualize();
         std::cout << std::endl;
         // 数据的形状变为：                         [70]
-        //                         [30       50]                  [100]
-        //                [10  20]   [30  40]   [50  60]   [70  90]    [100  110]
+        //                         [30       50]                  [110]
+        //                [10  20]   [30  40]   [50  60]   [70  100]    [110  120]
         // 改变数据形状
         key = 75;
         value = 75;
@@ -1042,10 +1069,10 @@ TEST_CASE("db/indexing.cc"){
         std::cout << std::endl;
 
         // 数据的形状：                            [70]
-        //                         [30       50]                       [100]
-        //                [10  20]   [30  40]   [50  60]    [70  75  90]     [100  110]
+        //                         [30       50]                       [110]
+        //                [10  20]   [30  40]   [50  60]    [70  75  100]    [110  120]
         // 第四种情况：要删除的数据所在node数据量不足够，向左兄弟借
-        key = 100;
+        key = 110;
         key = htobe32(key);
         iov[0].iov_base = &key;
         iov[0].iov_len = sizeof(int);
@@ -1054,12 +1081,12 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        std::cout << "删除100后树形(需要向左兄弟借键)：" << std::endl;
+        std::cout << "删除110后树形(需要向左兄弟借键)：" << std::endl;
         tree.visualize();
         std::cout << std::endl;
         // 数据的形状变为：                         [70]
-        //                         [30       50]                   [90]
-        //                [10  20]   [30  40]   [50  60]   [70  75]    [90  110]
+        //                         [30       50]                   [100]
+        //                [10  20]   [30  40]   [50  60]   [70  75]    [100  120]
         // 第五种情况：要删除的数据所在node数据量不足够，同时左右兄弟均无法借，则触发merge
         key = 30;
         key = htobe32(key);
@@ -1074,8 +1101,8 @@ TEST_CASE("db/indexing.cc"){
         tree.visualize();
         std::cout << std::endl;
         // 数据的形状变为：                              [70]
-        //                                   [50]                   [90]
-        //                      [10  20  40]      [50  60]   [70  75]    [90   110]
+        //                                   [50]                   [100]
+        //                      [10  20  40]      [50  60]   [70  75]    [100   120]
         // 第六种情况：节点删除触发了多层merge，还涉及到根节点下放的操作
         key = 70;
         key = htobe32(key);
@@ -1091,6 +1118,6 @@ TEST_CASE("db/indexing.cc"){
         std::cout << std::endl;
         // 数据的形状变为：                             
         //                                    [50               75]
-        //                      [10  20  40]        [50  60]          [75  90  110]
+        //                      [10  20  40]        [50  60]          [75  100  120]
     }
 }
