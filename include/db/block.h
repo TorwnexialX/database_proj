@@ -91,9 +91,8 @@ struct SuperHeader : CommonHeader
     unsigned int pad;        // 填充位(4B)
     long long records;       // 记录数目(8B)
     // 聚集索引相关
-    unsigned int order;      // B+树阶数
-    unsigned int root;       // B+树根节点
-    // hight
+    unsigned int order;      // B+树阶数(4B)
+    unsigned int root;       // B+树根节点(4B)
 };
 
 // 空闲块头部
