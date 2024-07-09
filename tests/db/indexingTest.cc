@@ -269,7 +269,6 @@ TEST_CASE("db/indexing.cc"){
         // 插入记录3
         unsigned int left_child = table_two.allocate();
         root_node.setNext(left_child);
-        tree.visualize();
         // 此时树的结构为
         //                     10               20
         //           left_child      mid_child     right_child
@@ -350,6 +349,9 @@ TEST_CASE("db/indexing.cc"){
     
     SECTION("Bptree::search")
     {
+        // 防止输出的中文乱码
+        SetConsoleOutputCP(CP_UTF8);
+
          //打开表
          Table table_two;
          table_two.open("table_two");
@@ -509,6 +511,8 @@ TEST_CASE("db/indexing.cc"){
         // 此时树的结构为
         //                                     10                             20
         //             [3(100)  5(200)  7(300)]      [13(400)  15(500)  17(600)]      [23(700)  25(800)  27(900)]
+        //std::cout << "建立的树结构：" << std::endl;
+        //tree.visualize();
         // 开始进行搜索函数测试
         // 搜索left_child:3
         struct iovec search_key;
@@ -656,8 +660,9 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
         // 数据的形状：         30
         //               10 20      30 40
-        std::cout << "叶子节点第一次分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第一次分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 插入重复数据10，测试无法插入的情况
         key = 10;
         value = 10;
@@ -703,8 +708,9 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
         // 数据的形状：          30        50
         //               10 20      30 40      50  60
-        std::cout << "叶子节点第二次分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第二次分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 插入第七个数据
         key = 70;
         value = 70;
@@ -739,8 +745,9 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(memcmp((void*)&search_result.second.iov_base, (void*)&value, search_result.second.iov_len));
         // 数据的形状：          30          50          70
         //                10 20      30 40      50  60      70  80
-        std::cout << "叶子节点第三次分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第三次分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 插入第九个数据
         key = 90;
         value = 90;
@@ -776,8 +783,9 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状：                            [70]
         //                      [30       50]                  [90]
         //                [10  20]   [30  40]   [50  60]    [70  80]     [90  100]
-        std::cout << "叶子节点第四次分裂、同时跟节点分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第四次分裂、同时根节点分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         struct iovec unique_key;
         key = 70;
         key = htobe32(key);
@@ -822,8 +830,9 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状：                                     [70]
         //                       [26      30       50]                        [90]
         //              [10  20]   [26  28]   [30  40]   [50  60]    [70  80]     [90  100]
-        std::cout << "叶子节点第五次分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第五次分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 插入第十三个数据
         key = 24;
         value = 24;
@@ -860,8 +869,9 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状：                                 [30                    70]
         //                       [22       26]                       [50]                        [90]
         //            [10  20]     [22  24]    [26  28]      [30  40]   [50  60]      [70  80]     [90  100]
-        std::cout << "叶子节点第六次分裂、同时非叶子分裂后树形：" << std::endl;
-        tree.visualize();
+        //std::cout << "叶子节点第六次分裂、同时非叶子分裂后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 清空树
         tree.clear_tree();
         super.setRoot(0);
@@ -886,7 +896,7 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         double elapsed_time = timer.stop();
-        std::cout << "Bptree operation time: " << elapsed_time << " seconds" << std::endl;
+        //std::cout << "Bptree operation time: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
         REQUIRE(success_num == 1000);
         // 清空树
@@ -909,7 +919,7 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         elapsed_time = timer.stop();
-        std::cout << "Bptree operation time two: " << elapsed_time << " seconds" << std::endl;
+        //std::cout << "Bptree operation time two: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
         REQUIRE(success_num == 2000);
         // 清空树
@@ -1058,9 +1068,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
-        std::cout << "删除测试前原始树形：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "删除测试前原始树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 数据的形状：                            [70]
         //                         [30       50]                    [90]
         //                [10  20]   [30  40]   [50  60]    [70  80]     [90  100  110]
@@ -1072,9 +1082,9 @@ TEST_CASE("db/indexing.cc"){
         iov[0].iov_len = sizeof(int);
         remove_result = tree.remove(iov[0]);
         REQUIRE(remove_result == false);
-        std::cout << "删除120后树形(不存在，树形不变)：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "删除120后树形(不存在，树形不变)：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 第二种情况：要删除的数据所在node数据量足够，可以直接删
         key = 110;
         key = htobe32(key);
@@ -1085,9 +1095,9 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         std::pair<bool, iovec> search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        std::cout << "删除110后树形：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "删除110后树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 将110插入回去
         key = 110;
         value = 110;
@@ -1109,9 +1119,9 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        std::cout << "先插入110还原树形，再删除80后树形(需要向右兄弟借键)：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "先插入110还原树形，再删除80后树形(需要向右兄弟借键)：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 数据的形状变为：                         [70]
         //                         [30       50]                  [100]
         //                [10  20]   [30  40]   [50  60]   [70  90]    [100  110]
@@ -1126,9 +1136,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
-        std::cout << "插入75改变树形：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "插入75改变树形：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
 
         // 数据的形状：                            [70]
         //                         [30       50]                       [100]
@@ -1143,9 +1153,9 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        std::cout << "删除100后树形(需要向左兄弟借键)：" << std::endl;
-        tree.visualize();
-        std::cout << std::endl;
+        //std::cout << "删除100后树形(需要向左兄弟借键)：" << std::endl;
+        //tree.visualize();
+        //std::cout << std::endl;
         // 数据的形状变为：                         [70]
         //                         [30       50]                   [90]
         //                [10  20]   [30  40]   [50  60]   [70  75]    [90  110]
