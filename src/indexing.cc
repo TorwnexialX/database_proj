@@ -97,6 +97,7 @@ unsigned int Bptree::find_leaf(struct iovec key){
     unsigned int child_len;
 
    reset_track();
+   hit_id_idx = {0, 0};
 
     while(!cur_node.is_leaf()){
         if (cur_node.getSlots() == 0) return 0; 
@@ -104,6 +105,12 @@ unsigned int Bptree::find_leaf(struct iovec key){
         // 'lb' stands for 'lowerbound'
         unsigned int lb_index = cur_node.searchRecord(key.iov_base, key.iov_len);
         bool if_same = cur_node.same_key(key, lb_index);
+
+        // 记录hit_node
+        if (if_same) {
+            hit_id_idx.first = cur_node.getSelf();
+            hit_id_idx.second = lb_index;
+        }
 
         // lb_index == 0 走left_node
         if (lb_index == 0 && !if_same) {
@@ -367,6 +374,22 @@ bool Bptree::remove(struct iovec key){
     unsigned &leaf_index = lb_index;
     leaf_node.deallocate(leaf_index);
 
+    // 若删除的记录为叶子节点中的首个记录，则非叶子节点中相应数据需要更新
+    if (leaf_index == 0) {
+        // 获得删除后节点的首个Record的key作为新key
+        Record head_record;
+        unsigned int head_key, key_len;
+        leaf_node.refslots(0, head_record);
+        head_record.getByIndex((char*)&head_key, &key_len, KEY_INDEX);
+
+        // 将要替换的新key传入上层更新函数，完成更新
+        struct iovec new_key;
+        new_key.iov_base = (void *)&head_key;
+        new_key.iov_len = key_len;
+
+        upper_update(new_key);
+    }
+
     // 当前叶节点即根节点，说明树只有一个节点，则删除工作到此结束
     if (leaf_node.getSelf() == superblock.getRoot()) return true;
 
@@ -422,6 +445,32 @@ bool Bptree::remove(struct iovec key){
     }
     
     return true;
+}
+
+void Bptree::upper_update(struct iovec new_key){
+    // 获取hit_node的id以及内部hit_record的index
+    unsigned int hit_node_id = hit_id_idx.first;
+    unsigned int hit_index = hit_id_idx.second;
+    
+    // 获取hit_node和hit_record
+    Node hit_node;
+    attach_node(hit_node, hit_node_id);
+    Record hit_record;
+    hit_node.refslots(hit_index, hit_record);
+
+    // 获取hit_record中原value，接着删除该record
+    unsigned int origin_value, value_len;
+    hit_record.getByIndex((char *) & origin_value, &value_len, VALUE_INDEX);
+    hit_node.deallocate(hit_index);
+
+    // 插入新的record，其键为new_key，value为origin_value
+    std::vector <struct iovec> iov(2);
+    iov[0] = new_key;
+    iov[1].iov_base = &origin_value;
+    iov[1].iov_len = value_len;
+    hit_node.insertRecord(iov);
+
+    return;
 }
 
 std::pair<bool, unsigned int>
@@ -651,13 +700,22 @@ Bptree::merge(Node &left_node, Node &right_node){
     }
 
     // 若该层节点不是叶子，则需要把next域包装成record复制到左节点中
-    // 而该next域对应的key应该是其在parent节点中到右节点对应record
+    // 而该next域对应的key应该是右节点next域指向的孩子节点中首record的key
     if (!right_node.is_leaf()) {
-        // 将next域等价的key-value封装为record插入左节点
+        // 取等价key
+        Node next_child;
+        Record head_record;
+        attach_node(next_child, right_node.getNext());
+        next_child.refslots(0, head_record);
+        unsigned int new_key, key_len;
+        head_record.getByIndex((char *)&new_key, &key_len, KEY_INDEX);
+
+        // 封装新key
         std::vector < struct iovec > iov(2);
         unsigned new_value = right_node.getNext();
         new_value = htobe32(new_value);
-        iov[0] = key;
+        iov[0].iov_base = &new_key;
+        iov[0].iov_len = sizeof(new_key);
         iov[1].iov_base = &new_value;
         iov[1].iov_len = sizeof(new_value);
         left_node.insertRecord(iov);
