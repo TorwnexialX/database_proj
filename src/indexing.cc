@@ -371,7 +371,7 @@ bool Bptree::remove(struct iovec key){
     if (!leaf_node.same_key(key, lb_index)) return false;
 
     // 要删除的项在该叶节点中，直接删除其中对应record
-    unsigned &leaf_index = lb_index;
+    unsigned int &leaf_index = lb_index;
     leaf_node.deallocate(leaf_index);
 
     // 若删除的记录为叶子节点中的首个记录，则非叶子节点中相应数据需要更新
@@ -393,7 +393,7 @@ bool Bptree::remove(struct iovec key){
     // 当前叶节点即根节点，说明树只有一个节点，则删除工作到此结束
     if (leaf_node.getSelf() == superblock.getRoot()) return true;
 
-   // 每个record中最小的项数
+   // 每个record中最小的项数（叶子节点标准）
    unsigned int min_keys = superblock.getOrder() / 2;
 
     Node cur_node = leaf_node;
@@ -406,12 +406,12 @@ bool Bptree::remove(struct iovec key){
         unsigned int& sib_id = borrow_result.second;
         unsigned int merge_sib_id = 0;
         // 借左兄弟的项
-        borrow_result = borrow_lsib(cur_node, key);
+        borrow_result = borrow_lsib(cur_node);
         unsigned int left_right = (sib_id != 0) ? 0 : 1;
         merge_sib_id = (left_right == 0) ? sib_id : 0;
         if (stop) return true;
         // 借右兄弟的项
-        borrow_result = borrow_rsib(cur_node, key);
+        borrow_result = borrow_rsib(cur_node);
         merge_sib_id = (left_right != 0) ? sib_id : merge_sib_id;
         if (stop) return true;
         // 需要合并
@@ -435,6 +435,7 @@ bool Bptree::remove(struct iovec key){
         }
         track.pop();
 
+        // 每个record中最小的项数（非叶子节点标准）
         min_keys = (superblock.getOrder() - 1) / 2;
     }
 
@@ -474,7 +475,7 @@ void Bptree::upper_update(struct iovec new_key){
 }
 
 std::pair<bool, unsigned int>
-Bptree::borrow_lsib(Node &current_node, struct iovec key) {
+Bptree::borrow_lsib(Node &current_node) {
     // 获取parent
     unsigned int parent_id = track.top();
     Node parent_node;
@@ -493,6 +494,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
         temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
         value = be32toh(value);
 
+        struct iovec key;
         // 若某record中的value对应右节点的id，则该record即待删record
         if (value == current_node.getSelf()) {
             unsigned int temp_key, key_len;
@@ -578,7 +580,7 @@ Bptree::borrow_lsib(Node &current_node, struct iovec key) {
 }
 
 std::pair<bool, unsigned int>
-Bptree::borrow_rsib(Node &current_node, struct iovec key) {
+Bptree::borrow_rsib(Node &current_node) {
     // 获取parent
     unsigned int parent_id = track.top();
     Node parent_node;
@@ -601,6 +603,7 @@ Bptree::borrow_rsib(Node &current_node, struct iovec key) {
             temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
             value = be32toh(value);
 
+            struct iovec key;
             // 若某record中的value对应右节点的id，则该record即待删record
             if (value == current_node.getSelf()) {
                 unsigned int temp_key, key_len;
