@@ -558,9 +558,10 @@ Bptree::borrow_lsib(Node &current_node) {
 
         // 本节点中新插入record：键=右节点在parent中对应的键 值=原next中的值
         std::vector<struct iovec> iov(2);
+        unsigned int new_value = htobe32(current_node.getNext());
         iov[0] = parent_key;
-        iov[1].iov_base = htobe32(current_node.getNext());
-        iov[1].iov_len = sizeof(int);
+        iov[1].iov_base = (void *) &new_value;
+        iov[1].iov_len = sizeof(new_value);
         current_node.insertRecord(iov);
 
         // 左兄弟删除旧record
