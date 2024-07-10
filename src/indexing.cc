@@ -486,6 +486,7 @@ Bptree::borrow_lsib(Node &current_node) {
 
     // 获取parent中右节点对应record的索引
     unsigned int current_index;
+    struct iovec parent_key, parent_value;
     for (int i = 0; i < parent_node.getSlots(); ++i) {
         // 遍历parent中每个record
         unsigned int value, value_len;
@@ -494,18 +495,18 @@ Bptree::borrow_lsib(Node &current_node) {
         temp_record.getByIndex((char*)&value, &value_len, VALUE_INDEX);
         value = be32toh(value);
 
-        struct iovec key;
         // 若某record中的value对应右节点的id，则该record即待删record
         if (value == current_node.getSelf()) {
-            unsigned int temp_key, key_len;
+            unsigned int temp_key, key_len, temp_value, value_len;
             temp_record.getByIndex((char*)&temp_key, &key_len, KEY_INDEX);
-            key.iov_base = &temp_key;
-            key.iov_len = key_len;
+            temp_record.getByIndex((char*)&temp_value, &value_len, VALUE_INDEX);
+            parent_key.iov_base = &temp_key;
+            parent_key.iov_len = key_len;
+            parent_value.iov_base = &temp_value;
+            parent_value.iov_len = value_len;
             current_index = i;
             break;
         }
-
-        // 若找到最后一个record都没找到，那么说明
     }
 
     // 获取左兄弟id
@@ -537,46 +538,91 @@ Bptree::borrow_lsib(Node &current_node) {
    unsigned int min_entries = current_node.is_leaf() ? superblock.getOrder() / 2 : (superblock.getOrder() - 1) / 2;
    if (left_sibling.getSlots() <= min_entries) return {false, lsib_id};
 
-   // 将左兄弟的最右侧项插入到当前节点
-   Record last_record;
-   left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
-   std::vector<struct iovec> last(2);
-   unsigned int last_key, last_value, key_len, value_len;
-   last_record.getByIndex((char*)&last_key, &key_len, KEY_INDEX);
-   last_record.getByIndex((char*)&last_value, &value_len, VALUE_INDEX);
-   last[0].iov_base = &last_key;
-   last[0].iov_len = key_len;
-   last[1].iov_base = &last_value;
-   last[1].iov_len = value_len;
-   current_node.insertRecord(last);
+    // 当前节点不是叶子
+    // 本节点next更新：左节点最后record.value更新到本节点next中
+    // 本节点中新插入record：键=右节点在parent中对应的键 值=原next中的值
+    // 左兄弟删除旧record并将键插入到parent中
 
-   // 删除左兄弟的最右侧项
-   left_sibling.deallocate(left_sibling.getSlots() - 1);
+    // 当前节点不是叶子
+    if (!current_node.is_leaf()) {
+        // 本节点next更新：左节点最后record.value更新到本节点next中
+        // 获取左节点的最后record.value
+        Record last_record;
+        left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
+        unsigned int last_value, value_len;
+        last_record.getByIndex((char*)&last_value, &value_len, VALUE_INDEX);
 
-   // 更新父节点中的相关键值
+        // 更新到本节点next中
+        last_value = be32toh(last_value);
+        current_node.setNext(last_value);
 
-   // 1. 获取待更新项的键
-   Record first_record;
-   current_node.refslots(0, first_record);
-   unsigned int new_key, new_key_len;
-   first_record.getByIndex((char *) & new_key, &new_key_len, KEY_INDEX);
+        // 本节点中新插入record：键=右节点在parent中对应的键 值=原next中的值
+        std::vector<struct iovec> iov(2);
+        iov[0] = parent_key;
+        iov[1].iov_base = htobe32(current_node.getNext());
+        iov[1].iov_len = sizeof(int);
+        current_node.insertRecord(iov);
 
-   // 2. 获取待更新项的值
-   unsigned int new_value = current_node.getSelf();
-   new_value = htobe32(new_value);
+        // 左兄弟删除旧record
+        unsigned int last_key, key_len;
+        last_record.getByIndex((char*)&last_key, &key_len, KEY_INDEX);
+        left_sibling.deallocate(left_sibling.getSlots() - 1);
+        
+        // 更新parent节点中对应记录
+        parent_node.deallocate(current_index);
+        std::vector<struct iovec> new_kv(2);
+        new_kv[0].iov_base = (void*) &last_key;
+        new_kv[0].iov_len = key_len;
+        new_kv[1] = parent_value;
+        parent_node.insertRecord(new_kv);
 
-   // 3. 删除父节点中旧项
-   parent_node.deallocate(current_index);
+        return {true, lsib_id}; // 借项成功
+    }
 
-   // 4. 父节点中添加新项
-   std::vector<struct iovec> new_kv(2);
-   new_kv[0].iov_base = (void*) &new_key;
-   new_kv[0].iov_len = new_key_len;
-   new_kv[1].iov_base = (void *) &new_value;
-   new_kv[1].iov_len = sizeof(new_value);
-   parent_node.insertRecord(new_kv);
+    // 当前节点是叶子
+    // 将左兄弟最后记录挪到本节点即可
+    else{
+        // 将左兄弟的最右侧项插入到当前节点
+        Record last_record;
+        left_sibling.refslots(left_sibling.getSlots() - 1, last_record);
+        std::vector<struct iovec> last(2);
+        unsigned int last_key, last_value, key_len, value_len;
+        last_record.getByIndex((char*)&last_key, &key_len, KEY_INDEX);
+        last_record.getByIndex((char*)&last_value, &value_len, VALUE_INDEX);
+        last[0].iov_base = &last_key;
+        last[0].iov_len = key_len;
+        last[1].iov_base = &last_value;
+        last[1].iov_len = value_len;
+        current_node.insertRecord(last);
 
-   return {true, lsib_id}; // 借项成功
+        // 删除左兄弟的最右侧项
+        left_sibling.deallocate(left_sibling.getSlots() - 1);
+
+        // 更新父节点中的相关键值
+
+        // 1. 获取待更新项的键
+        Record first_record;
+        current_node.refslots(0, first_record);
+        unsigned int new_key, new_key_len;
+        first_record.getByIndex((char *) & new_key, &new_key_len, KEY_INDEX);
+
+        // 2. 获取待更新项的值
+        unsigned int new_value = current_node.getSelf();
+        new_value = htobe32(new_value);
+
+        // 3. 删除父节点中旧项
+        parent_node.deallocate(current_index);
+
+        // 4. 父节点中添加新项
+        std::vector<struct iovec> new_kv(2);
+        new_kv[0].iov_base = (void*) &new_key;
+        new_kv[0].iov_len = new_key_len;
+        new_kv[1].iov_base = (void *) &new_value;
+        new_kv[1].iov_len = sizeof(new_value);
+        parent_node.insertRecord(new_kv);
+
+        return {true, lsib_id}; // 借项成功
+    }
 }
 
 std::pair<bool, unsigned int>
