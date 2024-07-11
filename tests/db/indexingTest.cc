@@ -881,6 +881,7 @@ TEST_CASE("db/indexing.cc"){
         super.setOrder(100);
 
         //连续插入数据
+        std::cout << "开始性能测试，耗时1.5s左右" << std::endl;
         int success_num = 0;
         int node_num = 10000;
         Timer timer;
@@ -919,7 +920,7 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         elapsed_time = timer.stop();
-        std::cout << "20000 insertion costs: " << elapsed_time << " seconds" << std::endl;
+        std::cout << "20000 insertions cost: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
         REQUIRE(success_num == 20000);
         // 清空树

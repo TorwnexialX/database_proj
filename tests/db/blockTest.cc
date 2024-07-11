@@ -754,7 +754,7 @@ TEST_CASE("db/block.h")
         
         remove_result = data.removeRecord(inexisted_key);
         REQUIRE(remove_result.first == false);
-        REQUIRE(remove_result.second == (unsigned short)-1);
+        REQUIRE(remove_result.second == 0);
               
     }
 
@@ -842,7 +842,7 @@ TEST_CASE("db/block.h")
         update_result = data.updateRecord(iov);
         unsigned short nslots = data.getSlots();
         REQUIRE(update_result.first == false);
-        REQUIRE(update_result.second == (unsigned short) -1);
+        REQUIRE(update_result.second == 0);
         nid = 7; // 还原nid
     }
 
