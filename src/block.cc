@@ -411,22 +411,20 @@ DataBlock::insertRecord(std::vector<struct iovec> &iov)
 }
 
 std::pair<bool, unsigned short>
-DataBlock::removeRecord(std::vector<struct iovec> &iov)
+DataBlock::removeRecord(struct iovec iov)
 {
     RelationInfo *info = table_->info_;
     unsigned int key = info->key;
     DataType *type = info->fields[key].type;
 
     unsigned short search_result;
-    search_result = searchRecord(iov[key].iov_base, iov[key].iov_len);
+    search_result = searchRecord(iov.iov_base, iov.iov_len);
 
     //判断lowbound的key和搜索的key是否一致。
     bool find_flag = false; // 指示找到的key与提供的key是否一致
     Record record;
     if (search_result >= getSlots())
         return std::pair<bool, unsigned short>(false, (unsigned short)-1);
-        // -1是unsigned short的非法值
-        // `(unsigned short)`化了之后为65535，真实删去的record的索引也很难达到这个值
 
     // 把slots中第search_result个slot的记录加载到record中
     refslots(search_result, record); 
@@ -434,7 +432,7 @@ DataBlock::removeRecord(std::vector<struct iovec> &iov)
     unsigned int plen;
     record.refByIndex(&pkey, &plen, key); // 将索引为key的字段base与长度分别存在pkey和plen中
     // 查看index处的key是否等于要删除的key，是则说明找到了要删除的记录
-    if (memcmp(pkey, iov[key].iov_base, iov[key].iov_len) == 0) find_flag = true;
+    if (memcmp(pkey, iov.iov_base, iov.iov_len) == 0) find_flag = true;
     else find_flag = false;
 
     // 被删除记录不存在
@@ -442,9 +440,6 @@ DataBlock::removeRecord(std::vector<struct iovec> &iov)
     // 被删除记录存在，删除对应记录
     else{
         deallocate(search_result);
-        // 更新块内空闲空间大小
-        unsigned int iov_size = requireLength(iov);
-
         return std::pair<bool, unsigned short>(true, search_result); // 返回删除位置
     }
 }
@@ -453,8 +448,12 @@ DataBlock::removeRecord(std::vector<struct iovec> &iov)
 std::pair<bool, unsigned short>
 DataBlock::updateRecord(std::vector<struct iovec> &iov)
 {
+    RelationInfo *info = table_->info_;
+    unsigned int key = info->key;
+    DataType *type = info->fields[key].type;
+    
     // 先执行删除操作
-    std::pair<bool, unsigned short> remove_result = removeRecord(iov);
+    std::pair<bool, unsigned short> remove_result = removeRecord(iov[key]);
     // 被更新记录不存在
     if (remove_result.first == false) return remove_result;
     // 被更新记录存在，删除对应记录，插入新的record 

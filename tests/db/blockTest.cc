@@ -727,7 +727,7 @@ TEST_CASE("db/block.h")
         unsigned short before_freesize = data.getFreeSize(); // Block的FreeSize
         unsigned short before_freespace = data.getFreeSpace();
 
-        std::pair<bool, unsigned short> remove_result = data.removeRecord(iov);
+        std::pair<bool, unsigned short> remove_result = data.removeRecord(iov[0]);
 
         // 删除后的内存情况(freesize, freespacesize, freespace)
         unsigned short after_freesize = data.getFreeSize(); // 176改变来源于 `deallocate()`
@@ -746,8 +746,13 @@ TEST_CASE("db/block.h")
         data.insertRecord(iov);
 
         /* 删除不存在的记录 */
-        nid = 10;
-        remove_result = data.removeRecord(iov);
+        long long inexisted_nid = 10;
+        type->htobe(&inexisted_nid);
+        struct iovec inexisted_key;
+        inexisted_key.iov_base = &inexisted_nid;
+        inexisted_key.iov_len = sizeof(inexisted_nid);
+        
+        remove_result = data.removeRecord(inexisted_key);
         REQUIRE(remove_result.first == false);
         REQUIRE(remove_result.second == (unsigned short)-1);
               

@@ -585,8 +585,7 @@ class DataBlock : public MetaBlock
     // 删除记录
     // 查找记录是否存在
     // 有则标定原记录为tomestone，然后改变freespace_size
-    std::pair<bool, unsigned short>
-    removeRecord(std::vector<struct iovec> &iov);
+    std::pair<bool, unsigned short> removeRecord(struct iovec iov);
     // 分裂块位置
     // 给定新增的记录大小和位置，计算从何处开始分裂该block
     // 1. 先按照键排序

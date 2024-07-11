@@ -882,7 +882,7 @@ TEST_CASE("db/indexing.cc"){
 
         //连续插入数据
         int success_num = 0;
-        int node_num = 1000;
+        int node_num = 10000;
         Timer timer;
         timer.start();
         for (int i = 0; i < node_num; ++i){
@@ -896,9 +896,9 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         double elapsed_time = timer.stop();
-        //std::cout << "Bptree operation time: " << elapsed_time << " seconds" << std::endl;
+        std::cout << "10000 insertions cost: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
-        REQUIRE(success_num == 1000);
+        REQUIRE(success_num == 10000);
         // 清空树
         tree.clear_tree();
         super.setRoot(0);
@@ -906,7 +906,7 @@ TEST_CASE("db/indexing.cc"){
         REQUIRE(super.getRoot() == 0);
         // 性能分析：插入两倍数据
         success_num = 0;
-        node_num = 2000;
+        node_num = 20000;
         timer.start();
         for (int i = 0; i < node_num; ++i){
             key = htobe32(i);
@@ -919,9 +919,9 @@ TEST_CASE("db/indexing.cc"){
             if (success_insert == true) success_num++;
         }
         elapsed_time = timer.stop();
-        //std::cout << "Bptree operation time two: " << elapsed_time << " seconds" << std::endl;
+        std::cout << "20000 insertion costs: " << elapsed_time << " seconds" << std::endl;
         REQUIRE(super.getRoot() != 0);
-        REQUIRE(success_num == 2000);
+        REQUIRE(success_num == 20000);
         // 清空树
         tree.clear_tree();
         super.setRoot(0);
@@ -1068,9 +1068,9 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
-        //std::cout << "删除测试前原始树形：" << std::endl;
-        //tree.visualize();
-        //std::cout << std::endl;
+        std::cout << "删除测试前原始树形：" << std::endl;
+        tree.visualize();
+        std::cout << std::endl;
         // 数据的形状：                            [70]
         //                         [30       50]                    [90]
         //                [10  20]   [30  40]   [50  60]    [70  80]     [90  100  110]
@@ -1082,9 +1082,9 @@ TEST_CASE("db/indexing.cc"){
         iov[0].iov_len = sizeof(int);
         remove_result = tree.remove(iov[0]);
         REQUIRE(remove_result == false);
-        //std::cout << "删除120后树形(不存在，树形不变)：" << std::endl;
-        //tree.visualize();
-        //std::cout << std::endl;
+        std::cout << "删除120后树形(不存在，树形不变)：" << std::endl;
+        tree.visualize();
+        std::cout << std::endl;
         // 第二种情况：要删除的数据所在node数据量足够，可以直接删
         key = 110;
         key = htobe32(key);
@@ -1095,9 +1095,9 @@ TEST_CASE("db/indexing.cc"){
         // 用search检验是否成功remove
         std::pair<bool, iovec> search_result = tree.search(iov[0]);
         REQUIRE(search_result.first == false);
-        //std::cout << "删除110后树形：" << std::endl;
-        //tree.visualize();
-        //std::cout << std::endl;
+        std::cout << "删除110后树形：" << std::endl;
+        tree.visualize();
+        std::cout << std::endl;
         // 将110插入回去
         key = 110;
         value = 110;
@@ -1109,7 +1109,7 @@ TEST_CASE("db/indexing.cc"){
         iov[1].iov_len = sizeof(int);
         success_insert = tree.insert(iov[0], iov[1]);
         REQUIRE(success_insert == true);
-        // 2:第二种情况：要删除的数据所在node数据量足够，可以直接删，但是需要上层更新
+        // 第三种情况：要删除的数据所在node数据量足够，可以直接删，但其为首键需上层更新
         key = 90;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -1136,7 +1136,7 @@ TEST_CASE("db/indexing.cc"){
         std::cout << "插入120后树形：" << std::endl;
         tree.visualize();
         std::cout << std::endl;
-        // 第三种情况：要删除的数据所在node数据量不足够，向右兄弟借
+        // 第四种情况：要删除的数据所在node数据量不足够，向右兄弟借
         key = 80;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -1170,7 +1170,7 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状：                            [70]
         //                         [30       50]                       [110]
         //                [10  20]   [30  40]   [50  60]    [70  75  100]    [110  120]
-        // 第四种情况：要删除的数据所在node数据量不足够，向左兄弟借
+        // 第五种情况：要删除的数据所在node数据量不足够，向左兄弟借
         key = 110;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -1186,7 +1186,7 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状变为：                         [70]
         //                         [30       50]                   [100]
         //                [10  20]   [30  40]   [50  60]   [70  75]    [100  120]
-        // 第五种情况：要删除的数据所在node数据量不足够，同时左右兄弟均无法借，则触发merge
+        // 第六种情况：要删除的数据所在node数据量不足够，同时左右兄弟均无法借，则触发merge
         key = 30;
         key = htobe32(key);
         iov[0].iov_base = &key;
@@ -1202,7 +1202,7 @@ TEST_CASE("db/indexing.cc"){
         // 数据的形状变为：                              [70]
         //                                   [50]                   [100]
         //                      [10  20  40]      [50  60]   [70  75]    [100   120]
-        // 第六种情况：节点删除触发了多层merge，还涉及到根节点下放的操作
+        // 第七种情况：节点删除触发了多层merge，还涉及到根节点下放的操作
         key = 70;
         key = htobe32(key);
         iov[0].iov_base = &key;

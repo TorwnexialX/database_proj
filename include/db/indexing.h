@@ -81,7 +81,7 @@ namespace db {
         // 从右兄弟借项，返回{是否成功，兄弟id}
         std::pair<bool, unsigned int> borrow_rsib(Node &current_node);
 
-        // 合并，返回merge后父节点中删除的记录的key
+        // 合并，返回merge后父节点中删除的记录的key以及parent节点id
         std::pair<struct iovec, unsigned int>
         merge(Node &left_node, Node &right_node);
 
